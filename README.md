@@ -41,7 +41,7 @@ Este é um aplicativo interativo construído com **Streamlit** para auxiliar no 
 
 ```bash
 git clone https://github.com/seu-usuario/CEM-Desafios.git
-cd Desafio1CEM
+cd CEM-Desafios
 ```
 
 ### 2. Instale as dependências

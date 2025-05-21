@@ -40,7 +40,7 @@ Este é um aplicativo interativo construído com **Streamlit** para auxiliar no 
 ### 1. Clone o repositório
 
 ```bash
-git clone https://github.com/seu-usuario/CEM-Desafios.git
+git clone https://github.com/laischristinny/CEM-Desafios.git
 cd CEM-Desafios
 ```
 

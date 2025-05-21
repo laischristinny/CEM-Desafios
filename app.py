@@ -196,200 +196,116 @@ with tab1:
 
     # ======= VISUALIZAÇÃO 3D =======
 
-    st.subheader("Visualização 3D do Núcleo com Espiras")
-
-    escala = 10
-    largura_coluna, altura_coluna = a * escala, b * escala
-    espessura = 2 * escala
-    espira_faixa = 0.6 * escala
-
-    def bloco(x, y, z, dx, dy, dz, color='gray', opacity=0.8):
-        return go.Mesh3d(
-            x=[x, x+dx, x+dx, x, x, x+dx, x+dx, x],
-            y=[y, y, y+dy, y+dy, y, y, y+dy, y+dy],
-            z=[z, z, z, z, z+dz, z+dz, z+dz, z+dz],
-            color=color,
-            opacity=opacity
-        )
-
-    # Núcleo E-I simplificado: 3 blocos para núcleo central + laterais
-    blocos = [
-        bloco(0, 0, 0, espessura, altura_coluna, largura_coluna),  # lado esquerdo
-        bloco(espessura + largura_coluna, 0, 0, espessura, altura_coluna, largura_coluna),  # centro
-        bloco((espessura + largura_coluna) * 2, 0, 0, espessura, altura_coluna, largura_coluna)  # lado direito
-    ]
-
-    def adicionar_espiras(x_ini, y_ini, z_ini, espessura, altura, largura, n_espiras, cor):
-        espiras = []
-        max_espiras_visiveis = min(n_espiras, 10)
-        for i in range(max_espiras_visiveis):
-            desloc = i * (espira_faixa / 2)
-            espiras.append(bloco(
-                x_ini - desloc,
-                y_ini,
-                z_ini - desloc,
-                espessura + 2 * desloc,
-                altura,
-                largura + 2 * desloc,
-                color=cor,
-                opacity=0.6
-            ))
-        return espiras
-
-    # Posicionamento das espiras:
-    # - Para múltiplos primários, posicionar espiras lado a lado no eixo Z
-    # - Para múltiplos secundários, posicionar espiras lado a lado no eixo X
-    # Ajustar distâncias para evitar sobreposição
-
-    # Definindo espaçamentos para múltiplos enrolamentos
-    espaco_entre_primarios = 60
-    espaco_entre_secundarios = 60
-
-    # Espiras dos primários
-    for i, Np in enumerate([N1] if len(V1_list) == 1 else [N1, N1]):
-        # Se tem um primário só, i=0, pos no centro em Z, se dois, pos em z i*espaco
-        z_pos = i * espaco_entre_primarios
-        blocos += adicionar_espiras(
-            espessura + largura_coluna,
-            0,
-            z_pos,
-            espessura,
-            altura_coluna,
-            largura_coluna,
-            Np // 10,
-            'blue'
-        )
-
-    # Espiras dos secundários
-    for i, Ns in enumerate([N2] if len(V2_list) == 1 else [N2, N2]):
-        # Posicionar os secundários deslocados no eixo X (mais para a direita)
-        x_pos = (espessura + largura_coluna) * 3 + i * espaco_entre_secundarios
-        blocos += adicionar_espiras(
-            x_pos,
-            0,
-            0,
-            espessura,
-            altura_coluna,
-            largura_coluna,
-            Ns // 10,
-            'red'
-        )
-
-    fig = go.Figure(data=blocos)
-    fig.update_layout(
-        scene=dict(
-            xaxis=dict(title='X', visible=False),
-            yaxis=dict(title='Altura', visible=False),
-            zaxis=dict(title='Profundidade', visible=False),
-            aspectmode='data'
-        ),
-        margin=dict(r=10, l=10, b=10, t=10)
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
+    def create_transformer_sections(x, y, z, dx, dy, dz):
+        return np.array([
+            [x, y, z],
+            [x + dx, y, z],
+            [x + dx, y + dy, z],
+            [x, y + dy, z],
+            [x, y, z + dz],
+            [x + dx, y, z + dz],
+            [x + dx, y + dy, z + dz],
+            [x, y + dy, z + dz]
+        ])
 
     def rotate_transformer(vertices, angle):
         rotation_matrix = np.array([
-            [ np.cos(angle), 1,0],
-            [0,-np.cos(angle),1],
-            [ np.sin(angle), np.cos(angle),0]
+            [np.cos(angle), 1, 0],
+            [0, -np.cos(angle), 1],
+            [np.sin(angle), np.cos(angle), 0]
         ])
         return np.dot(vertices, rotation_matrix.T)
-    
-    def create_transformer_sections(x, y, z, dx, dy, dz):
-        return np.array([[x, y, z],
-                        [x + dx, y, z],
-                        [x + dx, y + dy, z],
-                        [x, y + dy, z],
-                        [x, y, z + dz],
-                        [x + dx, y, z + dz],
-                        [x + dx, y + dy, z + dz],
-                        [x, y + dy, z + dz]])
-    
-    def plot_transformer(ax, vertices, c):
-        faces = [[vertices[j] for j in [0, 1, 5, 4]],
-                [vertices[j] for j in [7, 6, 2, 3]],
-                [vertices[j] for j in [0, 3, 7, 4]],
-                [vertices[j] for j in [1, 2, 6, 5]],
-                [vertices[j] for j in [0, 1, 2, 3]],
-                [vertices[j] for j in [4, 5, 6, 7]]]
 
-        poly3d = Poly3DCollection(faces, linewidths=1, alpha=.35, color=c)
-        ax.add_collection3d(poly3d)
-
-    def generate_transformer(ax, angle:float, a:float, b:float, first_tension:float, second_tension:float):
-        parts = [                     # X, Y, Z, H, W, T
-            create_transformer_sections(0, 0, 0, 0.5*a, 3*a, b),  # base da lamina "E"
-            create_transformer_sections(0, a+1.5*a, 0, 2*a, a*0.5, b),  # seção do secundario
-            create_transformer_sections(0, a, 0, 2*a, a, b),  # tronco central do transformador
-            create_transformer_sections(0, 0, 0, 2*a, a*0.5, b),  # seção do primario
-            create_transformer_sections(2*a, 0, 0, 0.5*a, 3*a, b)   # Seção que compõe a lamina tipo "I" (topo do transformador)
+    def plot_box(fig, vertices, color='gray', opacity=0.5):
+        faces = [
+            [0, 1, 5, 4], [7, 6, 2, 3],
+            [0, 3, 7, 4], [1, 2, 6, 5],
+            [0, 1, 2, 3], [4, 5, 6, 7]
         ]
-        #cont = 0
+
+        for face in faces:
+            x = [vertices[i][0] for i in face] + [vertices[face[0]][0]]
+            y = [vertices[i][1] for i in face] + [vertices[face[0]][1]]
+            z = [vertices[i][2] for i in face] + [vertices[face[0]][2]]
+            fig.add_trace(go.Scatter3d(
+                x=x, y=y, z=z,
+                mode='lines',
+                line=dict(color=color, width=3),
+                showlegend=False
+            ))
+
+    def add_coils(fig, a, b, V1, V2):
+        offset_factor = 0.5 * a
+
+        max_voltage = max(V1 + V2)
+
+        for i, v1 in enumerate(V1):
+            n_points = int(100 * (v1 / max_voltage))  # proporcional à maior tensão
+            z = np.linspace(a, 0.5*a, n_points) + a*1.01
+            x = (b/1.5)*np.cos(z*3*b) - (a*(-1.52)) - i * offset_factor
+            y = np.sin(z*3*b)*(b/1.5)+(b/2)
+            fig.add_trace(go.Scatter3d(
+                x=x, y=y, z=z,
+                mode='lines',
+                line=dict(color='brown', width=4),
+                name=f'Primário {i+1}'
+            ))
+
+        for j, v2 in enumerate(V2):
+            n_points = int(100 * (v2 / max_voltage))  # proporcional à maior tensão
+            z = np.linspace(0.6*a, a*1.2, n_points) - a*0.01
+            x = (b/1.5)*(np.cos(z*2*a)-2.5) + (b*2.79) + j * offset_factor
+            y = np.sin(z*2*a)*(b/1.5)+(b/2)
+            fig.add_trace(go.Scatter3d(
+                x=x, y=y, z=z,
+                mode='lines',
+                line=dict(color='yellow', width=4),
+                name=f'Secundário {j+1}'
+            ))
+
+    def generate_transformer_plot(angle, a, b, V1, V2):
+        fig = go.Figure()
+        parts = [
+            create_transformer_sections(0, 0, 0, 0.5*a, 3*a, b),
+            create_transformer_sections(0, a+1.5*a, 0, 2*a, a*0.5, b),
+            create_transformer_sections(0, a, 0, 2*a, a, b),
+            create_transformer_sections(0, 0, 0, 2*a, a*0.5, b),
+            create_transformer_sections(2*a, 0, 0, 0.5*a, 3*a, b)
+        ]
+
         for part in parts:
-            c = 'gray'
-            #if cont == 1 or cont == 3:
-            #    c = "C" + str(cont) #C1 = Laranja, C2 = Vermelho
-            #cont += 1
-            rotated_part = rotate_transformer(part, angle)
-            plot_transformer(ax, rotated_part, c) # plotar transformador rotacionado
+            rotated = rotate_transformer(part, angle)
+            plot_box(fig, rotated, color='gray', opacity=0.4)
 
-        n1 = first_tension*1.1
-        n2 = second_tension*1.1
-        if(n1>n2):
-            #primeiro enrolamento
-            zline = np.linspace(0.6*a, a*1.2, 100)+a*(0.75)
-            xline = np.cos(zline*3*b)
-            yline = np.sin(zline*3*b)
-            ax.plot3D((b/1.5)*xline-(a*(-1.52)), yline*(b/1.5)+(b/2), zline, color='brown')
+        add_coils(fig, a, b, V1, V2)
 
-            #segundo enrolamento
-            zline = np.linspace(a, 0.5*a, 50)-a*(0.01)
-            xline = np.cos(zline*2*b)-2.5
-            yline = np.sin(zline*2*b)
-            ax.plot3D((b/1.5)*xline+(b*2.79), yline*(b/1.5)+(b/2), zline, color='brown')
+        fig.update_layout(
+            scene=dict(
+                xaxis_title='X',
+                yaxis_title='Y',
+                zaxis_title='Z',
+                aspectmode='data'
+            ),
+            width=900,
+            height=750,
+            margin=dict(l=0, r=0, b=0, t=0)
+        )
 
-        elif(n2>n1): #se n2>n1
-            #primeiro enrolamento
-            zline = np.linspace(0.6*a, a*1.2, 100)-a*(0.01)
-            xline = np.cos(zline*3*b)
-            yline = np.sin(zline*3*b)
-            ax.plot3D((b/1.5)*xline-(a*(-1.52)), yline*(b/1.5)+(b/2), zline, color='brown')
+        return fig
 
-            #segundo enrolamento
-            zline = np.linspace(a, 0.5*a, 50)+a*(1.01)
-            xline = np.cos(zline*2*a)-2.5
-            yline = np.sin(zline*2*a)
-            ax.plot3D((b/1.5)*xline+(b*2.79), yline*(b/1.5)+(b/2), zline, color='brown')
+    st.title("Transformador Monofásico - Visualização 3D Interativa")
 
-        else:
-            #primeiro enrolamento
-            zline = np.linspace(a, 0.5*a, 50)+a*(1.01)
-            xline = np.cos(zline*2*a)
-            yline = np.sin(zline*2*a)
-            ax.plot3D((b/1.5)*xline-(a*(-1.52)), yline*(b/1.5)+(b/2), zline, color='brown')
-
-            #segundo enrolamento
-            zline = np.linspace(a, 0.5*a, 50)+a*(1.01)
-            xline = np.cos(zline*2*a)
-            yline = np.sin(zline*2*a)
-            ax.plot3D((b/1.5)*xline-(a*(-1.52)), yline*(b/1.5)+(b/2), zline-a, color='brown')
-    
-    # Botão para gerar visualização
     if st.button("Gerar Transformador"):
-        # Criar figura 3D
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
         angle = np.radians(90)
-        generate_transformer(ax, angle, a, b, float(V1_input[0]), float(V2_input[0]))
 
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
-        ax.set_zlabel("Z")
-        ax.set_box_aspect([1, 1, 1])  # eixo proporcional
+        # Converter strings para floats
+        V1 = [float(v) for v in V1_list]
+        V2 = [float(v) for v in V2_list]
+        print(f"v1 é {V1} e v2 é {V2}")
 
-        st.pyplot(fig)
+        fig = generate_transformer_plot(angle, a, b, V1, V2)
+        st.plotly_chart(fig, use_container_width=True)
+
 
 with tab2:
     st.header("Desafio 2")

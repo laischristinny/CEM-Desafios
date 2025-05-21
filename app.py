@@ -301,7 +301,6 @@ with tab1:
         # Converter strings para floats
         V1 = [float(v) for v in V1_list]
         V2 = [float(v) for v in V2_list]
-        print(f"v1 é {V1} e v2 é {V2}")
 
         fig = generate_transformer_plot(angle, a, b, V1, V2)
         st.plotly_chart(fig, use_container_width=True)

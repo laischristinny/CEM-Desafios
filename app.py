@@ -234,30 +234,130 @@ with tab1:
                 showlegend=False
             ))
 
-    def add_coils(fig, a, b, V1, V2):
-        offset_factor = 0.5 * a
+    def add_coils(fig, a, b, V1_voltages, V2_voltages): # V1_voltages, V2_voltages são listas de floats
+        common_x_center = 1.5 * a
+        common_y_center = b / 2
 
-        max_voltage = max(V1 + V2)
+        V1 = [float(v) for v in V1_voltages]
+        V2 = [float(v) for v in V2_voltages]
 
-        for i, v1 in enumerate(V1):
-            n_points = int(100 * (v1 / max_voltage))  # proporcional à maior tensão
-            z = np.linspace(a, 0.5*a, n_points) + a*1.01
-            x = (b/1.5)*np.cos(z*3*b) - (a*(-1.52)) - i * offset_factor
-            y = np.sin(z*3*b)*(b/1.5)+(b/2)
+        all_numeric_voltages = V1 + V2
+        if not all_numeric_voltages:
+            max_voltage = 1.0
+        else:
+            positive_voltages = [v for v in all_numeric_voltages if v > 0]
+            max_val_temp = max(positive_voltages) if positive_voltages else 0.0
+            max_voltage = max_val_temp if max_val_temp > 0 else 1.0 # Garante que max_voltage seja >= 1.0
+
+        coil_assembly_center_z = 1.25 * a
+        coil_height_z = 0.8 * a
+        z_min_common = coil_assembly_center_z - coil_height_z / 2.0
+        z_max_common = coil_assembly_center_z + coil_height_z / 2.0
+
+        num_primary_windings = len(V1)
+        num_secondary_windings = len(V2)
+
+        GAP_BETWEEN_PRIMARY_SECONDARY = b / 40.0
+        SECONDARY_PACK_RADIAL_THICKNESS = b / 7.0
+        PRIMARY_PACK_RADIAL_THICKNESS = b / 8.0
+        ABSOLUTE_OUTER_RADIUS_COIL_LIMIT = b / 2.05
+        MIN_RADIUS_PRIMARY_FALLBACK = b / 30.0
+        MIN_RADIUS_SECONDARY_FALLBACK = b / 25.0
+
+        radii_p, radii_s = [], []
+
+        if num_secondary_windings > 0:
+            outermost_secondary_r = ABSOLUTE_OUTER_RADIUS_COIL_LIMIT
+            if num_secondary_windings == 1:
+                radii_s = [outermost_secondary_r * 0.98]
+            else:
+                innermost_secondary_r = outermost_secondary_r - SECONDARY_PACK_RADIAL_THICKNESS
+                if innermost_secondary_r < MIN_RADIUS_SECONDARY_FALLBACK:
+                    innermost_secondary_r = MIN_RADIUS_SECONDARY_FALLBACK
+                if innermost_secondary_r >= outermost_secondary_r:
+                    innermost_secondary_r = outermost_secondary_r * 0.7
+                radii_s = np.linspace(innermost_secondary_r, outermost_secondary_r, num_secondary_windings).tolist()
+            limit_for_primary = (radii_s[0] if radii_s else outermost_secondary_r) - GAP_BETWEEN_PRIMARY_SECONDARY
+        else:
+            limit_for_primary = ABSOLUTE_OUTER_RADIUS_COIL_LIMIT - GAP_BETWEEN_PRIMARY_SECONDARY
+
+        if num_primary_windings > 0:
+            outermost_primary_r = limit_for_primary
+            if outermost_primary_r < MIN_RADIUS_PRIMARY_FALLBACK * 1.2:
+                outermost_primary_r = MIN_RADIUS_PRIMARY_FALLBACK * 1.5
+            if num_primary_windings == 1:
+                radii_p = [outermost_primary_r * 0.95]
+            else:
+                innermost_primary_r = outermost_primary_r - PRIMARY_PACK_RADIAL_THICKNESS
+                if innermost_primary_r < MIN_RADIUS_PRIMARY_FALLBACK:
+                    innermost_primary_r = MIN_RADIUS_PRIMARY_FALLBACK
+                if innermost_primary_r >= outermost_primary_r:
+                    innermost_primary_r = outermost_primary_r * 0.5
+                radii_p = np.linspace(innermost_primary_r, outermost_primary_r, num_primary_windings).tolist()
+
+        radii_p = [max(r, MIN_RADIUS_PRIMARY_FALLBACK * 0.5) for r in radii_p]
+        radii_s = [max(r, MIN_RADIUS_SECONDARY_FALLBACK * 0.5) for r in radii_s]
+        
+        # --- Fatores de escala para densidade de espiras ---
+        min_turn_scale_factor = 0.5  # Densidade mínima (para tensão baixa/zero)
+        max_turn_scale_factor = 1.5  # Densidade máxima (para tensão = max_voltage)
+                                    # Uma tensão de 0.5 * max_voltage resultará em (0.5 + (1.5-0.5)*0.5) = 1.0 (densidade base)
+
+        # Bobinas Primárias (marrons)
+        for i, v1_val in enumerate(V1):
+            if i >= len(radii_p): continue
+            current_radius_p = radii_p[i]
+            
+            n_points_p = int(100 * (v1_val / max_voltage)) # n_points já é proporcional à tensão
+            if n_points_p <= 1: n_points_p = 10
+            
+            z_values_common = np.linspace(z_min_common, z_max_common, n_points_p)
+            
+            # Calcula o fator de escala da densidade de espiras para esta bobina primária
+            relative_voltage_p = v1_val / max_voltage
+            current_turn_density_scaler_p = min_turn_scale_factor + \
+                                        (max_turn_scale_factor - min_turn_scale_factor) * relative_voltage_p
+            # Garante que o fator esteja dentro dos limites definidos
+            current_turn_density_scaler_p = max(min_turn_scale_factor, min(max_turn_scale_factor, current_turn_density_scaler_p))
+
+            base_angle_multiplier_p = 3 * b # Multiplicador angular base original
+            angle_param_primary = z_values_common * base_angle_multiplier_p * current_turn_density_scaler_p
+
+            x_p = common_x_center + current_radius_p * np.cos(angle_param_primary)
+            y_p = common_y_center + current_radius_p * np.sin(angle_param_primary)
+            
             fig.add_trace(go.Scatter3d(
-                x=x, y=y, z=z,
+                x=x_p, y=y_p, z=z_values_common,
                 mode='lines',
                 line=dict(color='brown', width=4),
                 name=f'Primário {i+1}'
             ))
 
-        for j, v2 in enumerate(V2):
-            n_points = int(100 * (v2 / max_voltage))  # proporcional à maior tensão
-            z = np.linspace(0.6*a, a*1.2, n_points) - a*0.01
-            x = (b/1.5)*(np.cos(z*2*a)-2.5) + (b*2.79) + j * offset_factor
-            y = np.sin(z*2*a)*(b/1.5)+(b/2)
+        # Bobinas Secundárias (amarelas)
+        for j, v2_val in enumerate(V2):
+            if j >= len(radii_s): continue
+            current_radius_s = radii_s[j]
+
+            n_points_s = int(100 * (v2_val / max_voltage)) # n_points já é proporcional à tensão
+            if n_points_s <= 1: n_points_s = 10
+
+            z_values_common = np.linspace(z_min_common, z_max_common, n_points_s)
+            
+            # Calcula o fator de escala da densidade de espiras para esta bobina secundária
+            relative_voltage_s = v2_val / max_voltage
+            current_turn_density_scaler_s = min_turn_scale_factor + \
+                                        (max_turn_scale_factor - min_turn_scale_factor) * relative_voltage_s
+            # Garante que o fator esteja dentro dos limites definidos
+            current_turn_density_scaler_s = max(min_turn_scale_factor, min(max_turn_scale_factor, current_turn_density_scaler_s))
+
+            base_angle_multiplier_s = 2 * a # Multiplicador angular base original
+            angle_param_secondary = z_values_common * base_angle_multiplier_s * current_turn_density_scaler_s
+
+            x_s = common_x_center + current_radius_s * np.cos(angle_param_secondary)
+            y_s = common_y_center + current_radius_s * np.sin(angle_param_secondary)
+
             fig.add_trace(go.Scatter3d(
-                x=x, y=y, z=z,
+                x=x_s, y=y_s, z=z_values_common,
                 mode='lines',
                 line=dict(color='yellow', width=4),
                 name=f'Secundário {j+1}'
@@ -359,209 +459,103 @@ with tab2:
         st.error(f"Ocorreu um erro ao ler a planilha: {e}")
 
 with tab3:
-    st.title("Transformador Monofásico - Calculadora de Parâmetros")
+    st.subheader("Ensaio em Circuito Aberto")
+    Vca = st.number_input("Tensão (Vca) [V]", min_value=0.0, value=220.0)
+    Ica = st.number_input("Corrente (Ica) [A]", min_value=0.0, value=1.0)
+    Pca = st.number_input("Potência (Pca) [W]", min_value=0.0, value=100.0)
 
-    # Entradas do transformador
-    N1 = st.number_input("Número de espiras do primário (N1)", min_value=1, value=1000)
-    N2 = st.number_input("Número de espiras do secundário (N2)", min_value=1, value=100)
-
-    circuit_type = st.selectbox("Tipo de Circuito Equivalente", ["", "T", "L", "Série"])
-    referred_to = st.selectbox("Referido a", ["", "primário", "secundário"])
-
-    st.markdown("## Conjunto de Dados A")
-    setA_type = st.selectbox("Tipo de Ensaio A", ["", "circuito-aberto", "curto-circuito"])
-    setA_side = st.selectbox("Lado do Ensaio A", ["", "baixo", "alto"])
-    Va = st.number_input("Tensão Va (V)", min_value=0.0, value=220.0)
-    Ia = st.number_input("Corrente Ia (A)", min_value=0.0, value=1.0)
-    Pa = st.number_input("Potência Pa (W)", min_value=0.0, value=100.0)
-
-    st.markdown("## Conjunto de Dados B")
-    setB_type = st.selectbox("Tipo de Ensaio B", ["", "circuito-aberto", "curto-circuito"])
-    setB_side = st.selectbox("Lado do Ensaio B", ["", "baixo", "alto"])
-    Vb = st.number_input("Tensão Vb (V)", min_value=0.0, value=50.0)
-    Ib = st.number_input("Corrente Ib (A)", min_value=0.0, value=5.0)
-    Pb = st.number_input("Potência Pb (W)", min_value=0.0, value=200.0)
+    # Entradas do ensaio em curto-circuito
+    st.subheader("Ensaio em Curto-Circuito")
+    Vcc = st.number_input("Tensão (Vcc) [V]", min_value=0.0, value=50.0)
+    Icc = st.number_input("Corrente (Icc) [A]", min_value=0.0, value=5.0)
+    Pcc = st.number_input("Potência (Pcc) [W]", min_value=0.0, value=200.0)
 
     if st.button("Calcular Parâmetros"):
-        try:
-            if Ia == 0 or Ib == 0:
-                raise ValueError("Corrente não pode ser zero.")
-            if Pa == 0 or Pb == 0:
-                raise ValueError("Potência não pode ser zero.")
-            if Va == 0 or Vb == 0:
-                raise ValueError("Tensão não pode ser zero.")
+        st.markdown("## Resultados")
 
-            a = N1 / N2
-            a2 = a ** 2
+        # Circuito aberto - cálculo de Rc e Xm
+        cos_phi0 = Pca / (Vca * Ica)
+        phi0 = np.arccos(cos_phi0)
+        Iw = Ica * cos_phi0
+        Im = Ica * np.sin(phi0)
 
-            def calc_open(V, I, P):
-                if I == 0 or P == 0:
-                    raise ValueError("Corrente e potência devem ser maiores que zero para o circuito aberto.")
-                Rc = (V**2) / P
-                Zphi = V / I
-                under_root = 1 / (Zphi**2) - 1 / (Rc**2)
-                if under_root < 0:
-                    raise ValueError("Impossível calcular Xm: raiz de número negativo.")
-                Xm = 1 / np.sqrt(under_root)
-                return Rc, Xm, Zphi
+        Rc = Vca / Iw if Iw != 0 else float('inf')
+        Xm = Vca / Im if Im != 0 else float('inf')
 
-            def calc_short(V, I, P):
-                if I == 0:
-                    raise ValueError("Corrente deve ser maior que zero para o curto-circuito.")
-                Zcc = V / I
-                Req = P / (I**2)
-                under_root = Zcc**2 - Req**2
-                if under_root < 0:
-                    raise ValueError("Impossível calcular Xeq: raiz de número negativo.")
-                Xeq = np.sqrt(under_root)
-                return Req, Xeq, Zcc
+        # Curto-circuito - cálculo de Re (resistência equivalente) e Xe (reatância equivalente)
+        cos_phicc = Pcc / (Vcc * Icc)
+        phicc = np.arccos(cos_phicc)
+        Zeq = Vcc / Icc
+        Re = Zeq * cos_phicc
+        Xe = Zeq * np.sin(phicc)
 
-            Rc = Xm = Zphi = Req = Xeq = Rc_prime = Xm_prime = Iphi_prime = Ic = Im = 0
+        st.write(f"**Rc (resistência de núcleo):** {Rc:.2f} Ω")
+        st.write(f"**Xm (reatância de magnetização):** {Xm:.2f} Ω")
+        st.write(f"**Re (resistência equivalente):** {Re:.2f} Ω")
+        st.write(f"**Xe (reatância equivalente):** {Xe:.2f} Ω")
 
-            if setA_type == "curto-circuito" and setA_side == "baixo" and setB_type == "circuito-aberto" and setB_side == "alto":
-                Req, Xeq, _ = calc_short(Va, Ia, Pa)
-                Rc, Xm, Zphi = calc_open(Vb, Ib, Pb)
-                Rc_prime = Rc * a2
-                Xm_prime = Xm * a2
-                Iphi_prime = Ib / a
-                Ic = Vb / Rc_prime
-                Im = Vb / Xm_prime
+        # Diagrama Fasorial
+        st.markdown("### Diagrama Fasorial")
+        fig, ax = plt.subplots()
 
-            elif setA_type == "circuito-aberto" and setA_side == "baixo" and setB_type == "curto-circuito" and setB_side == "alto":
-                Rc, Xm, Zphi = calc_open(Va, Ia, Pa)
-                Rc_prime = Rc * a2
-                Xm_prime = Xm * a2
-                Iphi_prime = Ia / a
-                Ic = Va / Rc_prime
-                Im = Va / Xm_prime
-                Req, Xeq, _ = calc_short(Vb, Ib, Pb)
+        # Tensão como vetor referência (horizontal)
+        V_mod = Vca / max(Vca, Ica)  # Normaliza para ficar proporcional aos vetores de corrente
+        # Normaliza os vetores
+        max_magnitude = max(abs(V_mod), abs(Iw), abs(Im), abs(Ica))
+        V_mod_normalizado = V_mod / max_magnitude
+        Iw_normalizado = Iw / max_magnitude
+        Im_normalizado = Im / max_magnitude
+        Ica_normalizado = Ica / max_magnitude
 
-            elif setA_type == "curto-circuito" and setA_side == "alto" and setB_type == "circuito-aberto" and setB_side == "baixo":
-                Req, Xeq, _ = calc_short(Va, Ia, Pa)
-                Rc, Xm, Zphi = calc_open(Vb, Ib, Pb)
+        # Calcular os valores máximos absolutos dos vetores
+        max_val = max(abs(V_mod), abs(Iw), abs(Im), abs(Ica))
 
-            elif setA_type == "circuito-aberto" and setA_side == "alto" and setB_type == "curto-circuito" and setB_side == "baixo":
-                Rc, Xm, Zphi = calc_open(Va, Ia, Pa)
-                Rc_prime = Rc * a2
-                Xm_prime = Xm * a2
-                Iphi_prime = Ia * (N2 / N1)
-                Ic = Va / Rc_prime
-                Im = Va / Xm_prime
-                Req, Xeq, _ = calc_short(Vb, Ib, Pb)
-            else:
-                raise ValueError("Combinação de ensaio A/B inválida ou incompleta.")
+        # Definir limites para os eixos com base no valor máximo
+        # Vamos definir um fator de ampliação para garantir que o gráfico não fique muito apertado
+        fator_ampliacao = 1.1  # 10% a mais do que o valor máximo
 
-            Rp = Xp = Rs = Xs = ReqTotal = XeqTotal = None
+        # Ajustar os limites dos eixos
+        ax.set_xlim(-max_val * fator_ampliacao, max_val * fator_ampliacao)
+        ax.set_ylim(-max_val * fator_ampliacao, max_val * fator_ampliacao)
 
-            if circuit_type == "T":
-                if referred_to == "primário":
-                    Rp = Req / a2
-                    Xp = Xeq / a2
-                    Rs = Req - Rp
-                    Xs = Xeq - Xp
-                elif referred_to == "secundário":
-                    Rp = Req * a2
-                    Xp = Xeq * a2
-                    Rs = Req - Rp
-                    Xs = Xeq - Xp
+        # Plota os vetores normalizados
+        ax.quiver(0, 0, V_mod_normalizado, 0, angles='xy', scale_units='xy', scale=1, color='orange', label='Vca (referência)')
+        ax.quiver(0, 0, Iw_normalizado, 0, angles='xy', scale_units='xy', scale=1, color='r', label='Iw (A)')
+        ax.quiver(0, 0, 0, Im_normalizado, angles='xy', scale_units='xy', scale=1, color='b', label='Im (A)')
+        ax.quiver(0, 0, Iw_normalizado, Im_normalizado, angles='xy', scale_units='xy', scale=1, color='g', label='Ica (A)')
 
-            elif circuit_type == "L":
-                if referred_to == "primário":
-                    Rp = Req / a2
-                    Xp = Xeq / a2
-                    ReqTotal = Rp + (Req - Rp)
-                    XeqTotal = Xp + (Xeq - Xp)
-                elif referred_to == "secundário":
-                    Rp = Req * a2
-                    Xp = Xeq * a2
-                    ReqTotal = Rp + (Req - Rp)
-                    XeqTotal = Xp + (Xeq - Xp)
+        # Adiciona o ângulo phi0
+        cos_phi0 = Pca / (Vca * Ica)
+        if abs(cos_phi0) > 1:
+            st.write(f"Valor inválido: Pca = {Pca} excede Vca*Ica = {Vca*Ica}")
+        else:
+            cos_phi0 = np.clip(cos_phi0, -1.0, 1.0)
+            phi0 = np.arccos(cos_phi0)
+            phi0_deg = np.degrees(phi0)
 
-            elif circuit_type == "Série":
-                ReqTotal = Req + (Rc_prime / a2 if Rc_prime else 0)
-                XeqTotal = Xeq + (Xm_prime / a2 if Xm_prime else 0)
+        arc = Arc((0, 0), 0.5, 0.5, angle=0, theta1=0, theta2=phi0_deg, color='gray', linestyle='--')
+        ax.add_patch(arc)
+        ax.text(0.35, 0.05, f'φ₀ = {phi0_deg:.2f}°', fontsize=10, color='gray')
 
-            st.markdown("### Resultados do Transformador")
+        # Título, rótulos e grid
+        ax.set_xlabel("Eixo Real")
+        ax.set_ylabel("Eixo Imaginário")
+        ax.grid(True)
+        # Coloca a legenda fora do gráfico
+        ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+        ax.set_title("Diagrama Fasorial (Ensaio em Circuito Aberto)")
 
-            col1, col2 = st.columns(2)
+        # Exibe o gráfico
+        st.pyplot(fig)
 
-            with col1:
-                st.markdown(f"**Rc (Ω):** {round(Rc, 2)}")
-                st.markdown(f"**Xm (Ω):** {round(Xm, 2)}")
-                st.markdown(f"**Rc Referido (Ω):** {round(Rc_prime, 2) if Rc_prime else '—'}")
-                st.markdown(f"**Xm Referido (Ω):** {round(Xm_prime, 2) if Xm_prime else '—'}")
-                st.markdown(f"**Zphi (Ω):** {round(Zphi, 2)}")
-                st.markdown(f"**Ic (mA):** {round(Ic * 1000, 2) if Ic else '—'}")
-                st.markdown(f"**Im (mA):** {round(Im * 1000, 2) if Im else '—'}")
+    #     # Ilustração do circuito equivalente
+    #     st.markdown("### Circuito Equivalente (Modelo Simplificado)")
 
-            with col2:
-                st.markdown(f"**Req (Ω):** {round(Req, 2)}")
-                st.markdown(f"**Xeq (Ω):** {round(Xeq, 2)}")
-                st.markdown(f"**Rp (Ω):** {round(Rp, 2) if Rp else '—'}")
-                st.markdown(f"**Xp (Ω):** {round(Xp, 2) if Xp else '—'}")
-                st.markdown(f"**Rs (Ω):** {round(Rs, 2) if Rs else '—'}")
-                st.markdown(f"**Xs (Ω):** {round(Xs, 2) if Xs else '—'}")
-                st.markdown(f"**Req Total (Ω):** {round(ReqTotal, 2) if ReqTotal else '—'}")
-                st.markdown(f"**Xeq Total (Ω):** {round(XeqTotal, 2) if XeqTotal else '—'}")
-
-            st.markdown("### Diagrama Fasorial da Corrente de Excitação")
-
-            if Ic is not None and Im is not None:
-                fig, ax = plt.subplots()
-
-                # Normaliza os vetores
-                Iphi = np.sqrt(Ic**2 + Im**2)
-                max_val = max(abs(Iphi), abs(Ic), abs(Im))
-                fator_ampliacao = 1.2  # 20% extra para margem
-                escala = 1 / max_val if max_val != 0 else 1
-
-                # Vetores normalizados
-                Ic_n = Ic * escala
-                Im_n = Im * escala
-                Iphi_n_x = Ic_n
-                Iphi_n_y = Im_n
-
-                # Vetor tensão (referência horizontal)
-                ax.quiver(0, 0, 1, 0, angles='xy', scale_units='xy', scale=1, color='orange', label='V (referência)')
-
-                # Correntes
-                ax.quiver(0, 0, Ic_n, 0, angles='xy', scale_units='xy', scale=1, color='r', label='Ic (ativa)')
-                ax.quiver(0, 0, 0, Im_n, angles='xy', scale_units='xy', scale=1, color='b', label='Im (reativa)')
-                ax.quiver(0, 0, Iphi_n_x, Iphi_n_y, angles='xy', scale_units='xy', scale=1, color='g', label='Iφ (resultante)')
-
-                # Adiciona o ângulo φ entre tensão e corrente
-                if Iphi != 0:
-                    cos_phi = Ic / Iphi
-                    cos_phi = np.clip(cos_phi, -1, 1)
-                    phi_rad = np.arccos(cos_phi)
-                    phi_deg = np.degrees(phi_rad)
-
-                    arc = Arc((0, 0), 0.4, 0.4, angle=0, theta1=0, theta2=phi_deg, color='gray', linestyle='--')
-                    ax.add_patch(arc)
-                    ax.text(0.3, 0.05, f'φ = {phi_deg:.2f}°', fontsize=10, color='gray')
-
-                # Configurações do gráfico
-                ax.set_xlim(-fator_ampliacao, fator_ampliacao)
-                ax.set_ylim(-fator_ampliacao, fator_ampliacao)
-                ax.set_xlabel("Eixo Real")
-                ax.set_ylabel("Eixo Imaginário")
-                ax.set_title("Diagrama Fasorial da Corrente de Excitação")
-                ax.grid(True)
-                ax.set_aspect('equal')
-                ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
-
-                st.pyplot(fig)
-            else:
-                st.warning("Corrente de excitação inválida ou ausente. Verifique os dados de entrada.")
-
-        except ValueError as ve:
-            st.error(f"Erro de entrada: {ve}")
-
-        except ZeroDivisionError:
-            st.error("Erro: Divisão por zero detectada.")
-
-        except Exception as e:
-            st.error(f"Erro inesperado: {e}")
+    #     st.image(
+    #     "https://www.researchgate.net/profile/Josnier-Ramos-Guardarrama/publication/331683668/figure/fig4/AS:735195284671488@1557984930854/Figura-19-Circuito-equivalente-de-un-transformador-monofasico.png",
+    #     caption="Fonte: Ramos-Guardarrama, ResearchGate (uso educacional)",
+    #     use_container_width=True
+    # )
 
 with tab4:
     st.header("Desafio 4 - Regulação de Tensão")

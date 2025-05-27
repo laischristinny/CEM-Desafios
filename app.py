@@ -120,7 +120,7 @@ with tab1:
         return laminas[-1]
 
     numero_lamina = selecionar_lamina(a, tipo_de_lamina)
-
+    a = numero_lamina["a_cm"]
     # Dimensões efetivas do nucleo central
     SgEfetivo = a * b
     SmEfetivo = round(SgEfetivo / 1.1, 2)
@@ -193,7 +193,7 @@ with tab1:
 
     # ======= VISUALIZAÇÃO 3D =======
 
-    def create_transformer_sections(x, y, z, dx, dy, dz):
+    def criar_seções_do_transformador(x, y, z, dx, dy, dz):
         return np.array([
             [x, y, z],
             [x + dx, y, z],
@@ -205,7 +205,7 @@ with tab1:
             [x, y + dy, z + dz]
         ])
 
-    def rotate_transformer(vertices, angle):
+    def rotacionar_transformador(vertices, angle):
         rotation_matrix = np.array([
             [np.cos(angle), 1, 0],
             [0, -np.cos(angle), 1],
@@ -213,7 +213,7 @@ with tab1:
         ])
         return np.dot(vertices, rotation_matrix.T)
 
-    def plot_box(fig, vertices, color='gray', opacity=0.5):
+    def plot_transformador(fig, vertices, color='gray', opacity=0.5):
         faces = [
             [0, 1, 5, 4], [7, 6, 2, 3],
             [0, 3, 7, 4], [1, 2, 6, 5],
@@ -231,7 +231,7 @@ with tab1:
                 showlegend=False
             ))
 
-    def add_coils(fig, a, b, V1_voltages, V2_voltages): # V1_voltages, V2_voltages são listas de floats
+    def add_espiras(fig, a, b, V1_voltages, V2_voltages): # V1_voltages, V2_voltages são listas de floats
         common_x_center = 1.5 * a
         common_y_center = b / 2
 
@@ -360,21 +360,21 @@ with tab1:
                 name=f'Secundário {j+1}'
             ))
 
-    def generate_transformer_plot(angle, a, b, V1, V2):
+    def gerar_visu_transformador(angle, a, b, V1, V2):
         fig = go.Figure()
         parts = [
-            create_transformer_sections(0, 0, 0, 0.5*a, 3*a, b),
-            create_transformer_sections(0, a+1.5*a, 0, 2*a, a*0.5, b),
-            create_transformer_sections(0, a, 0, 2*a, a, b),
-            create_transformer_sections(0, 0, 0, 2*a, a*0.5, b),
-            create_transformer_sections(2*a, 0, 0, 0.5*a, 3*a, b)
+            criar_seções_do_transformador(0, 0, 0, 0.5*a, 3*a, b),
+            criar_seções_do_transformador(0, a+1.5*a, 0, 2*a, a*0.5, b),
+            criar_seções_do_transformador(0, a, 0, 2*a, a, b),
+            criar_seções_do_transformador(0, 0, 0, 2*a, a*0.5, b),
+            criar_seções_do_transformador(2*a, 0, 0, 0.5*a, 3*a, b)
         ]
 
         for part in parts:
-            rotated = rotate_transformer(part, angle)
-            plot_box(fig, rotated, color='gray', opacity=0.4)
+            rotated = rotacionar_transformador(part, angle)
+            plot_transformador(fig, rotated, color='gray', opacity=0.4)
 
-        add_coils(fig, a, b, V1, V2)
+        add_espiras(fig, a, b, V1, V2)
 
         fig.update_layout(
             scene=dict(
@@ -399,7 +399,7 @@ with tab1:
         V1 = [float(v) for v in V1_list]
         V2 = [float(v) for v in V2_list]
 
-        fig = generate_transformer_plot(angle, a, b, V1, V2)
+        fig = gerar_visu_transformador(angle, a, b, V1, V2)
         st.plotly_chart(fig, use_container_width=True)
 
 

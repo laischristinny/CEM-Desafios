@@ -231,134 +231,75 @@ with tab1:
                 showlegend=False
             ))
 
-    def add_espiras(fig, a, b, V1_voltages, V2_voltages): # V1_voltages, V2_voltages são listas de floats
+    def add_espiras(fig, a, b, V1_voltages, V2_voltages):
         common_x_center = 1.5 * a
         common_y_center = b / 2
 
         V1 = [float(v) for v in V1_voltages]
         V2 = [float(v) for v in V2_voltages]
+        all_voltages = V1 + V2
 
-        all_numeric_voltages = V1 + V2
-        if not all_numeric_voltages:
-            max_voltage = 1.0
-        else:
-            positive_voltages = [v for v in all_numeric_voltages if v > 0]
-            max_val_temp = max(positive_voltages) if positive_voltages else 0.0
-            max_voltage = max_val_temp if max_val_temp > 0 else 1.0 # Garante que max_voltage seja >= 1.0
+        max_voltage = max([v for v in all_voltages if v > 0], default=1.0)
 
-        coil_assembly_center_z = 1.25 * a
-        coil_height_z = 0.8 * a
-        z_min_common = coil_assembly_center_z - coil_height_z / 2.0
-        z_max_common = coil_assembly_center_z + coil_height_z / 2.0
+        z_center = 1.25 * a
+        coil_height = 0.8 * a
+        z_min = z_center - coil_height / 2
+        z_max = z_center + coil_height / 2
 
-        num_primary_windings = len(V1)
-        num_secondary_windings = len(V2)
+        params = {
+            'gap': b / 40,
+            'sec_thickness': b / 7,
+            'pri_thickness': b / 8,
+            'outer_limit': b / 2.05,
+            'min_pri': b / 30,
+            'min_sec': b / 25
+        }
 
-        GAP_BETWEEN_PRIMARY_SECONDARY = b / 40.0
-        SECONDARY_PACK_RADIAL_THICKNESS = b / 7.0
-        PRIMARY_PACK_RADIAL_THICKNESS = b / 8.0
-        ABSOLUTE_OUTER_RADIUS_COIL_LIMIT = b / 2.05
-        MIN_RADIUS_PRIMARY_FALLBACK = b / 30.0
-        MIN_RADIUS_SECONDARY_FALLBACK = b / 25.0
+        def calc_radii(num, outer, thickness, min_fallback):
+            if num <= 0:
+                return []
+            if num == 1:
+                return [outer * 0.98]
+            inner = max(outer - thickness, min_fallback)
+            if inner >= outer:
+                inner = outer * 0.7
+            return np.linspace(inner, outer, num).tolist()
 
-        radii_p, radii_s = [], []
+        # Secundário
+        radii_s = calc_radii(len(V2), params['outer_limit'], params['sec_thickness'], params['min_sec'])
+        limit_pri = (radii_s[0] - params['gap']) if radii_s else (params['outer_limit'] - params['gap'])
 
-        if num_secondary_windings > 0:
-            outermost_secondary_r = ABSOLUTE_OUTER_RADIUS_COIL_LIMIT
-            if num_secondary_windings == 1:
-                radii_s = [outermost_secondary_r * 0.98]
-            else:
-                innermost_secondary_r = outermost_secondary_r - SECONDARY_PACK_RADIAL_THICKNESS
-                if innermost_secondary_r < MIN_RADIUS_SECONDARY_FALLBACK:
-                    innermost_secondary_r = MIN_RADIUS_SECONDARY_FALLBACK
-                if innermost_secondary_r >= outermost_secondary_r:
-                    innermost_secondary_r = outermost_secondary_r * 0.7
-                radii_s = np.linspace(innermost_secondary_r, outermost_secondary_r, num_secondary_windings).tolist()
-            limit_for_primary = (radii_s[0] if radii_s else outermost_secondary_r) - GAP_BETWEEN_PRIMARY_SECONDARY
-        else:
-            limit_for_primary = ABSOLUTE_OUTER_RADIUS_COIL_LIMIT - GAP_BETWEEN_PRIMARY_SECONDARY
+        # Primário
+        radii_p = calc_radii(len(V1), limit_pri, params['pri_thickness'], params['min_pri'])
 
-        if num_primary_windings > 0:
-            outermost_primary_r = limit_for_primary
-            if outermost_primary_r < MIN_RADIUS_PRIMARY_FALLBACK * 1.2:
-                outermost_primary_r = MIN_RADIUS_PRIMARY_FALLBACK * 1.5
-            if num_primary_windings == 1:
-                radii_p = [outermost_primary_r * 0.95]
-            else:
-                innermost_primary_r = outermost_primary_r - PRIMARY_PACK_RADIAL_THICKNESS
-                if innermost_primary_r < MIN_RADIUS_PRIMARY_FALLBACK:
-                    innermost_primary_r = MIN_RADIUS_PRIMARY_FALLBACK
-                if innermost_primary_r >= outermost_primary_r:
-                    innermost_primary_r = outermost_primary_r * 0.5
-                radii_p = np.linspace(innermost_primary_r, outermost_primary_r, num_primary_windings).tolist()
+        # Garante raios mínimos
+        radii_p = [max(r, params['min_pri'] * 0.5) for r in radii_p]
+        radii_s = [max(r, params['min_sec'] * 0.5) for r in radii_s]
 
-        radii_p = [max(r, MIN_RADIUS_PRIMARY_FALLBACK * 0.5) for r in radii_p]
-        radii_s = [max(r, MIN_RADIUS_SECONDARY_FALLBACK * 0.5) for r in radii_s]
-        
-        # --- Fatores de escala para densidade de espiras ---
-        min_turn_scale_factor = 0.5  # Densidade mínima (para tensão baixa/zero)
-        max_turn_scale_factor = 1.5  # Densidade máxima (para tensão = max_voltage)
-                                    # Uma tensão de 0.5 * max_voltage resultará em (0.5 + (1.5-0.5)*0.5) = 1.0 (densidade base)
+        def draw_coils(voltages, radii, color, name_prefix, angle_factor):
+            for i, v in enumerate(voltages):
+                if i >= len(radii): continue
+                radius = radii[i]
+                relative_v = v / max_voltage
 
-        # Bobinas Primárias (marrons)
-        for i, v1_val in enumerate(V1):
-            if i >= len(radii_p): continue
-            current_radius_p = radii_p[i]
-            
-            n_points_p = int(100 * (v1_val / max_voltage)) # n_points já é proporcional à tensão
-            if n_points_p <= 1: n_points_p = 10
-            
-            z_values_common = np.linspace(z_min_common, z_max_common, n_points_p)
-            
-            # Calcula o fator de escala da densidade de espiras para esta bobina primária
-            relative_voltage_p = v1_val / max_voltage
-            current_turn_density_scaler_p = min_turn_scale_factor + \
-                                        (max_turn_scale_factor - min_turn_scale_factor) * relative_voltage_p
-            # Garante que o fator esteja dentro dos limites definidos
-            current_turn_density_scaler_p = max(min_turn_scale_factor, min(max_turn_scale_factor, current_turn_density_scaler_p))
+                turn_density = 0.5 + (1.5 - 0.5) * relative_v
+                n_points = max(int(100 * relative_v), 10)
 
-            base_angle_multiplier_p = 3 * b # Multiplicador angular base original
-            angle_param_primary = z_values_common * base_angle_multiplier_p * current_turn_density_scaler_p
+                z_vals = np.linspace(z_min, z_max, n_points)
+                angle = z_vals * angle_factor * turn_density
 
-            x_p = common_x_center + current_radius_p * np.cos(angle_param_primary)
-            y_p = common_y_center + current_radius_p * np.sin(angle_param_primary)
-            
-            fig.add_trace(go.Scatter3d(
-                x=x_p, y=y_p, z=z_values_common,
-                mode='lines',
-                line=dict(color='brown', width=4),
-                name=f'Primário {i+1}'
-            ))
+                x = common_x_center + radius * np.cos(angle)
+                y = common_y_center + radius * np.sin(angle)
 
-        # Bobinas Secundárias (amarelas)
-        for j, v2_val in enumerate(V2):
-            if j >= len(radii_s): continue
-            current_radius_s = radii_s[j]
+                fig.add_trace(go.Scatter3d(
+                    x=x, y=y, z=z_vals,
+                    mode='lines',
+                    line=dict(color=color, width=4),
+                    name=f'{name_prefix} {i+1}'
+                ))
 
-            n_points_s = int(100 * (v2_val / max_voltage)) # n_points já é proporcional à tensão
-            if n_points_s <= 1: n_points_s = 10
-
-            z_values_common = np.linspace(z_min_common, z_max_common, n_points_s)
-            
-            # Calcula o fator de escala da densidade de espiras para esta bobina secundária
-            relative_voltage_s = v2_val / max_voltage
-            current_turn_density_scaler_s = min_turn_scale_factor + \
-                                        (max_turn_scale_factor - min_turn_scale_factor) * relative_voltage_s
-            # Garante que o fator esteja dentro dos limites definidos
-            current_turn_density_scaler_s = max(min_turn_scale_factor, min(max_turn_scale_factor, current_turn_density_scaler_s))
-
-            base_angle_multiplier_s = 2 * a # Multiplicador angular base original
-            angle_param_secondary = z_values_common * base_angle_multiplier_s * current_turn_density_scaler_s
-
-            x_s = common_x_center + current_radius_s * np.cos(angle_param_secondary)
-            y_s = common_y_center + current_radius_s * np.sin(angle_param_secondary)
-
-            fig.add_trace(go.Scatter3d(
-                x=x_s, y=y_s, z=z_values_common,
-                mode='lines',
-                line=dict(color='yellow', width=4),
-                name=f'Secundário {j+1}'
-            ))
+        draw_coils(V1, radii_p, 'brown', 'Primário', 3 * b)
+        draw_coils(V2, radii_s, 'yellow', 'Secundário', 2 * a)
 
     def gerar_visu_transformador(angle, a, b, V1, V2):
         fig = go.Figure()

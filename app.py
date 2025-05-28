@@ -195,152 +195,270 @@ with tab1:
 
     def criar_seções_do_transformador(x, y, z, dx, dy, dz):
         return np.array([
-            [x, y, z],
-            [x + dx, y, z],
-            [x + dx, y + dy, z],
-            [x, y + dy, z],
-            [x, y, z + dz],
-            [x + dx, y, z + dz],
-            [x + dx, y + dy, z + dz],
-            [x, y + dy, z + dz]
+            [x, y, z], [x + dx, y, z], [x + dx, y + dy, z], [x, y + dy, z], # Vértices 0,1,2,3 (base)
+            [x, y, z + dz], [x + dx, y, z + dz], [x + dx, y + dy, z + dz], [x, y + dy, z + dz] # Vértices 4,5,6,7 (topo)
         ])
-
-    def rotacionar_transformador(vertices, angle):
-        rotation_matrix = np.array([
-            [np.cos(angle), 1, 0],
-            [0, -np.cos(angle), 1],
-            [np.sin(angle), np.cos(angle), 0]
-        ])
+    
+    def rotacionar_transformador(vertices, angle_rad):
+        if np.isclose(angle_rad, np.pi/2): # Rotação específica x->y, y->z, z->x (se essa for a intenção)
+            rotation_matrix = np.array([
+                [0, 1, 0], # y_velho para x_novo
+                [0, 0, 1], # z_velho para y_novo
+                [1, 0, 0]  # x_velho para z_novo
+            ])
+        elif np.isclose(angle_rad, 0):
+            rotation_matrix = np.eye(3)
+        else:
+            rotation_matrix = np.array([ # Matriz original do usuário
+                [np.cos(angle_rad), 1, 0],
+                [0, -np.cos(angle_rad), 1],
+                [np.sin(angle_rad), np.cos(angle_rad), 0]
+            ])
+        if vertices.ndim == 1:
+            vertices = vertices.reshape(1,3)
         return np.dot(vertices, rotation_matrix.T)
+        
+    def plot_transformador(fig, vertices, color='gray', opacity=0.6):
+        vx = vertices[:, 0]
+        vy = vertices[:, 1]
+        vz = vertices[:, 2]
 
-    def plot_transformador(fig, vertices, color='gray', opacity=0.5):
-        faces = [
-            [0, 1, 5, 4], [7, 6, 2, 3],
-            [0, 3, 7, 4], [1, 2, 6, 5],
-            [0, 1, 2, 3], [4, 5, 6, 7]
+        # Faces do paralelepípedo (cada face é uma lista de 4 índices de vértices)
+        # Ordem: Base, Topo, Frente, Trás, Esquerda, Direita
+        faces_quad = [
+            [0, 1, 2, 3],  # Base
+            [4, 5, 6, 7],  # Topo (corrigido para usar 4,5,6,7 no sentido horário ou anti-horário consistente) -> 7,6,5,4 ou 4,5,6,7
+            [0, 1, 5, 4],  # Frente
+            [3, 2, 6, 7],  # Trás
+            [0, 3, 7, 4],  # Esquerda
+            [1, 2, 6, 5]   # Direita
         ]
+        
+        i_tri, j_tri, k_tri = [], [], []
+        for face in faces_quad:
+            # Triângulo 1 da face: v0, v1, v2
+            i_tri.append(face[0])
+            j_tri.append(face[1])
+            k_tri.append(face[2])
+            # Triângulo 2 da face: v0, v2, v3
+            i_tri.append(face[0])
+            j_tri.append(face[2])
+            k_tri.append(face[3])
 
-        for face in faces:
-            x = [vertices[i][0] for i in face] + [vertices[face[0]][0]]
-            y = [vertices[i][1] for i in face] + [vertices[face[0]][1]]
-            z = [vertices[i][2] for i in face] + [vertices[face[0]][2]]
-            fig.add_trace(go.Scatter3d(
-                x=x, y=y, z=z,
-                mode='lines',
-                line=dict(color=color, width=3),
-                showlegend=False
-            ))
+        fig.add_trace(go.Mesh3d(
+            x=vx, y=vy, z=vz,
+            i=i_tri, j=j_tri, k=k_tri,
+            opacity=opacity, color=color, flatshading=True,
+            alphahull=0 # Garante que usemos os triângulos definidos
+        ))
 
-    def add_espiras(fig, a, b, V1_voltages, V2_voltages):
-        common_x_center = 1.5 * a
-        common_y_center = b / 2
+        # Arestas para melhor definição
+        edges = [
+            (0,1), (1,2), (2,3), (3,0), (4,5), (5,6), (6,7), (7,4),
+            (0,4), (1,5), (2,6), (3,7)
+        ]
+        edge_x, edge_y, edge_z = [], [], []
+        for p1_idx, p2_idx in edges:
+            edge_x.extend([vertices[p1_idx,0], vertices[p2_idx,0], None])
+            edge_y.extend([vertices[p1_idx,1], vertices[p2_idx,1], None])
+            edge_z.extend([vertices[p1_idx,2], vertices[p2_idx,2], None])
+        fig.add_trace(go.Scatter3d(
+            x=edge_x, y=edge_y, z=edge_z, mode='lines',
+            line=dict(color='darkslategrey', width=2.5), showlegend=False
+        ))
+
+
+    def add_espiras(fig, angle_rad_para_rotacao, a_param_geral, # Passando 'a' para referência de tamanho
+                V1_voltages, V2_voltages,
+                z_min_coil, z_max_coil,
+                center_x_p, center_y_p, perna_dx_p, perna_dy_p,
+                center_x_s, center_y_s, perna_dx_s, perna_dy_s):
+
+        def calcular_max_voltage(V1, V2):
+            all_v = V1 + V2
+            if not all_v: return 1.0
+            positivos = [v for v in all_v if v > 0]
+            return max(max(positivos) if positivos else 1.0, 1.0)
+
+        def calcular_radii_adjusted(num_coils, perna_dx, perna_dy, a_ref_dim):
+            if num_coils == 0: return []
+
+            # Folga entre a superfície da perna e a primeira camada de espiras (carretel visual)
+            folga_carretel_visual = a_ref_dim * 0.05 # Ex: 5% de 'a'
+
+            # O raio da primeira espira (a mais interna, mas externa à perna)
+            # Este é o raio até o centro do "fio" da primeira espira.
+            raio_primeira_espira = max(perna_dx / 2.0, perna_dy / 2.0) + folga_carretel_visual
+
+            if num_coils == 1:
+                # Se só uma espira, adicionamos uma pequena espessura visual para o fio
+                return [raio_primeira_espira + a_ref_dim * 0.02] 
+
+            # Espessura radial total do pacote de bobinas (todas as camadas)
+            espessura_pacote_total_visual = a_ref_dim * 0.20 # Ex: 20% de 'a'
+            if num_coils > 3: # Se muitas espiras, pode precisar de um pacote mais grosso
+                espessura_pacote_total_visual = a_ref_dim * (0.15 + num_coils * 0.03) # Aumenta com o número
+                espessura_pacote_total_visual = min(espessura_pacote_total_visual, a_ref_dim * 0.5) # Limita
+
+            raio_ultima_espira = raio_primeira_espira + espessura_pacote_total_visual
+            
+            # Garante que os raios sejam positivos e que o último seja maior que o primeiro
+            if raio_primeira_espira <= 0.01: raio_primeira_espira = 0.01 
+            if raio_ultima_espira <= raio_primeira_espira:
+                raio_ultima_espira = raio_primeira_espira + a_ref_dim * 0.05 # Garante um pacote mínimo
+
+            return np.linspace(raio_primeira_espira, raio_ultima_espira, num_coils).tolist()
+
+        def desenhar_bobinas_coords(voltages, radii, z_min, z_max, max_v_ref, base_angle_mult, c_x, c_y):
+            all_coils_points = []
+            for i, v_val in enumerate(voltages):
+                if i >= len(radii): continue
+                r = radii[i]
+                if r <= 0: continue
+                
+                rel_v = v_val / max_v_ref
+                min_scale, max_scale = 0.5, 1.5 # densidade não usada diretamente no angulo aqui
+                # densidade = max(min_scale, min(max_scale, min_scale + (max_scale - min_scale) * rel_v))
+                n_pontos = max(int(80 * rel_v) + 25, 25) # Aumentado para mais suavidade
+                z_vals = np.linspace(z_min, z_max, n_pontos)
+                # ângulo para ter voltas visíveis, densidade afeta quantas voltas
+                angle_param = np.linspace(0, base_angle_mult * 2 * np.pi * (min_scale + (max_scale - min_scale) * rel_v), n_pontos)
+                
+                x_coil_orig = c_x + r * np.cos(angle_param)
+                y_coil_orig = c_y + r * np.sin(angle_param)
+                
+                coil_points = np.vstack((x_coil_orig, y_coil_orig, z_vals)).T
+                all_coils_points.append({"points": coil_points, "voltage": v_val})
+            return all_coils_points
 
         V1 = [float(v) for v in V1_voltages]
         V2 = [float(v) for v in V2_voltages]
-        all_voltages = V1 + V2
+        max_voltage_ref = calcular_max_voltage(V1, V2)
+        num_V1 = len(V1)
+        num_V2 = len(V2)
 
-        max_voltage = max([v for v in all_voltages if v > 0], default=1.0)
-
-        z_center = 1.25 * a
-        coil_height = 0.8 * a
-        z_min = z_center - coil_height / 2
-        z_max = z_center + coil_height / 2
-
-        params = {
-            'gap': b / 40,
-            'sec_thickness': b / 7,
-            'pri_thickness': b / 8,
-            'outer_limit': b / 2.05,
-            'min_pri': b / 30,
-            'min_sec': b / 25
-        }
-
-        def calc_radii(num, outer, thickness, min_fallback):
-            if num <= 0:
-                return []
-            if num == 1:
-                return [outer * 0.98]
-            inner = max(outer - thickness, min_fallback)
-            if inner >= outer:
-                inner = outer * 0.7
-            return np.linspace(inner, outer, num).tolist()
-
-        # Secundário
-        radii_s = calc_radii(len(V2), params['outer_limit'], params['sec_thickness'], params['min_sec'])
-        limit_pri = (radii_s[0] - params['gap']) if radii_s else (params['outer_limit'] - params['gap'])
-
-        # Primário
-        radii_p = calc_radii(len(V1), limit_pri, params['pri_thickness'], params['min_pri'])
-
-        # Garante raios mínimos
-        radii_p = [max(r, params['min_pri'] * 0.5) for r in radii_p]
-        radii_s = [max(r, params['min_sec'] * 0.5) for r in radii_s]
-
-        def draw_coils(voltages, radii, color, name_prefix, angle_factor):
-            for i, v in enumerate(voltages):
-                if i >= len(radii): continue
-                radius = radii[i]
-                relative_v = v / max_voltage
-
-                turn_density = 0.5 + (1.5 - 0.5) * relative_v
-                n_points = max(int(100 * relative_v), 10)
-
-                z_vals = np.linspace(z_min, z_max, n_points)
-                angle = z_vals * angle_factor * turn_density
-
-                x = common_x_center + radius * np.cos(angle)
-                y = common_y_center + radius * np.sin(angle)
-
+        if num_V1 > 0:
+            radii_p = calcular_radii_adjusted(num_V1, perna_dx_p, perna_dy_p, a_param_geral)
+            coils_data_p = desenhar_bobinas_coords(V1, radii_p, z_min_coil, z_max_coil, max_voltage_ref, 8, center_x_p, center_y_p)
+            for idx, coil_info in enumerate(coils_data_p):
+                vertices_espiras_p_orig = coil_info["points"]
+                if vertices_espiras_p_orig.size == 0: continue
+                vertices_espiras_p_rot = rotacionar_transformador(vertices_espiras_p_orig, angle_rad_para_rotacao)
                 fig.add_trace(go.Scatter3d(
-                    x=x, y=y, z=z_vals,
-                    mode='lines',
-                    line=dict(color=color, width=4),
-                    name=f'{name_prefix} {i+1}'
+                    x=vertices_espiras_p_rot[:,0], y=vertices_espiras_p_rot[:,1], z=vertices_espiras_p_rot[:,2],
+                    mode='lines', line=dict(color='brown', width=3.5), name=f'Primário {idx+1}'
                 ))
 
-        draw_coils(V1, radii_p, 'brown', 'Primário', 3 * b)
-        draw_coils(V2, radii_s, 'yellow', 'Secundário', 2 * a)
+        if num_V2 > 0:
+            radii_s = calcular_radii_adjusted(num_V2, perna_dx_s, perna_dy_s, a_param_geral)
+            coils_data_s = desenhar_bobinas_coords(V2, radii_s, z_min_coil, z_max_coil, max_voltage_ref, 8, center_x_s, center_y_s)
+            for idx, coil_info in enumerate(coils_data_s):
+                vertices_espiras_s_orig = coil_info["points"]
+                if vertices_espiras_s_orig.size == 0: continue
+                vertices_espiras_s_rot = rotacionar_transformador(vertices_espiras_s_orig, angle_rad_para_rotacao)
+                fig.add_trace(go.Scatter3d(
+                    x=vertices_espiras_s_rot[:,0], y=vertices_espiras_s_rot[:,1], z=vertices_espiras_s_rot[:,2],
+                    mode='lines', line=dict(color='gold', width=3.5), name=f'Secundário {idx+1}'
+                ))
 
-    def gerar_visu_transformador(angle, a, b, V1, V2):
+
+    def gerar_visu_transformador(angle_rad, a, b, V1_tensões, V2_tensões):
         fig = go.Figure()
-        parts = [
-            criar_seções_do_transformador(0, 0, 0, 0.5*a, 3*a, b),
-            criar_seções_do_transformador(0, a+1.5*a, 0, 2*a, a*0.5, b),
-            criar_seções_do_transformador(0, a, 0, 2*a, a, b),
-            criar_seções_do_transformador(0, 0, 0, 2*a, a*0.5, b),
-            criar_seções_do_transformador(2*a, 0, 0, 0.5*a, 3*a, b)
+
+        largura_perna_central_x = a * 0.8
+        profundidade_perna_central_y = b * 0.7 # Relacionado a 'b'
+        coil_height_z = 0.8 * a
+        z_min_coil_ref = (1.25 * a) - (coil_height_z / 2)
+
+        pc_dx = largura_perna_central_x
+        pc_dy = profundidade_perna_central_y
+        pc_dz = coil_height_z
+        pc_x = (1.5 * a) - (pc_dx / 2)
+        pc_y = (b / 2) - (pc_dy / 2)
+        pc_z = z_min_coil_ref
+
+        pl_dx = pc_dx / 2 
+        pl_dy = pc_dy 
+        pl_dz = pc_dz 
+        janela_x = a * 0.35
+
+        ple_x = pc_x - janela_x - pl_dx
+        ple_y = pc_y
+        ple_z = pc_z
+        centro_x_ple_orig = ple_x + pl_dx / 2
+        centro_y_ple_orig = ple_y + pl_dy / 2
+
+        pld_x = pc_x + pc_dx + janela_x
+        pld_y = pc_y
+        pld_z = pc_z
+        centro_x_pld_orig = pld_x + pl_dx / 2
+        centro_y_pld_orig = pld_y + pl_dy / 2
+        
+        espessura_base_topo_z = a * 0.3
+        be_dx = (pld_x + pl_dx) - ple_x
+        be_dy = pc_dy
+        be_dz = espessura_base_topo_z
+        be_x = ple_x
+        be_y = pc_y
+        be_z = pc_z - espessura_base_topo_z
+
+        bi_dx = be_dx
+        bi_dy = pc_dy
+        bi_dz = espessura_base_topo_z
+        bi_x = ple_x
+        bi_y = pc_y
+        bi_z = pc_z + pc_dz
+
+        parts_definitions = [
+            {"pos": [pc_x, pc_y, pc_z], "dims": [pc_dx, pc_dy, pc_dz]},
+            {"pos": [ple_x, ple_y, ple_z], "dims": [pl_dx, pl_dy, pl_dz]},
+            {"pos": [pld_x, pld_y, pld_z], "dims": [pl_dx, pl_dy, pl_dz]},
+            {"pos": [be_x, be_y, be_z], "dims": [be_dx, be_dy, be_dz]},
+            {"pos": [bi_x, bi_y, bi_z], "dims": [bi_dx, bi_dy, bi_dz]}
         ]
+        core_color = 'rgb(150, 150, 160)' # Cor do núcleo
+        core_opacity = 0.6 # Opacidade do núcleo
 
-        for part in parts:
-            rotated = rotacionar_transformador(part, angle)
-            plot_transformador(fig, rotated, color='gray', opacity=0.4)
+        for p_def in parts_definitions:
+            part_vertices = criar_seções_do_transformador(
+                p_def["pos"][0], p_def["pos"][1], p_def["pos"][2],
+                p_def["dims"][0], p_def["dims"][1], p_def["dims"][2]
+            )
+            rotated_part_vertices = rotacionar_transformador(part_vertices, angle_rad)
+            plot_transformador(fig, rotated_part_vertices, color=core_color, opacity=core_opacity)
 
-        add_espiras(fig, a, b, V1, V2)
+        z_inicio_bobinas = pc_z 
+        z_fim_bobinas = pc_z + pc_dz
 
-        fig.update_layout(
+        # Chamada para add_espiras agora passa o parâmetro 'a'
+        add_espiras(fig, angle_rad, a, # <--- Passando 'a' aqui
+                    V1_tensões, V2_tensões,
+                    z_inicio_bobinas, z_fim_bobinas,
+                    centro_x_pld_orig, centro_y_pld_orig, pl_dx, pl_dy,
+                    centro_x_ple_orig, centro_y_ple_orig, pl_dx, pl_dy)
+
+        fig.update_layout( 
             scene=dict(
-                xaxis_title='X',
-                yaxis_title='Y',
-                zaxis_title='Z',
-                aspectmode='data'
+                xaxis_title='X', yaxis_title='Y', zaxis_title='Z',
+                aspectmode='data',
+                xaxis_showspikes=False, yaxis_showspikes=False, zaxis_showspikes=False,
+                bgcolor='rgb(25, 25, 35)',
+                camera=dict(eye=dict(x=2.0, y=2.0, z=1.5))
             ),
-            width=900,
-            height=750,
-            margin=dict(l=0, r=0, b=0, t=0)
+            width=900, height=750,
+            margin=dict(l=0, r=0, b=0, t=0),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
-
         return fig
+
 
     st.title("Transformador Monofásico - Visualização 3D Interativa")
 
     if st.button("Gerar Transformador"):
         angle = np.radians(90)
-
-        # Converter strings para floats
-        V1 = [float(v) for v in V1_list]
-        V2 = [float(v) for v in V2_list]
-
-        fig = gerar_visu_transformador(angle, a, b, V1, V2)
+        V1_floats = [float(v) for v in V1_list]
+        V2_floats = [float(v) for v in V2_list]
+        fig = gerar_visu_transformador(angle, a, b, V1_floats, V2_floats)
         st.plotly_chart(fig, use_container_width=True)
 
 

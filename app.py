@@ -521,144 +521,144 @@ with tab3:
     N1 = st.number_input("Número de espiras do primário (N1)", min_value=1, value=1000)
     N2 = st.number_input("Número de espiras do secundário (N2)", min_value=1, value=100)
 
+    prim_side = "alto" if N1 > N2 else "baixo"
+    sec_side = "alto" if prim_side == "baixo" else "baixo"
+
     circuit_type = st.selectbox("Tipo de Circuito Equivalente", ["", "T", "L", "Série"])
     referred_to = st.selectbox("Referido a", ["", "primário", "secundário"])
+    sec_type = st.selectbox(f"Tipo de Ensaio do Secundário", ["", "circuito-aberto", "curto-circuito"])
+    prim_type = "curto-circuito" if sec_type == "circuito-aberto" else "circuito-aberto"
 
-    st.markdown("## Conjunto de Dados A")
-    setA_type = st.selectbox("Tipo de Ensaio A", ["", "circuito-aberto", "curto-circuito"])
-    setA_side = st.selectbox("Lado do Ensaio A", ["", "baixo", "alto"])
+    st.markdown("## Dados do Ensaio de Curto-Circuito")
     Va = st.number_input("Tensão Va (V)", min_value=0.0, value=220.0)
     Ia = st.number_input("Corrente Ia (A)", min_value=0.0, value=1.0)
     Pa = st.number_input("Potência Pa (W)", min_value=0.0, value=100.0)
 
-    st.markdown("## Conjunto de Dados B")
-    setB_type = st.selectbox("Tipo de Ensaio B", ["", "circuito-aberto", "curto-circuito"])
-    setB_side = st.selectbox("Lado do Ensaio B", ["", "baixo", "alto"])
+    st.markdown("## Conjunto de Dados Circuito Aberto")
     Vb = st.number_input("Tensão Vb (V)", min_value=0.0, value=50.0)
     Ib = st.number_input("Corrente Ib (A)", min_value=0.0, value=5.0)
     Pb = st.number_input("Potência Pb (W)", min_value=0.0, value=200.0)
 
     if st.button("Calcular Parâmetros"):
         try:
-            if Ia == 0 or Ib == 0:
-                raise ValueError("Corrente não pode ser zero.")
-            if Pa == 0 or Pb == 0:
-                raise ValueError("Potência não pode ser zero.")
-            if Va == 0 or Vb == 0:
-                raise ValueError("Tensão não pode ser zero.")
+            # Validar entradas
+            if Ia <= 0 or Ib <= 0:
+                raise ValueError("Corrente deve ser maior que zero.")
+            if Pa <= 0 or Pb <= 0:
+                raise ValueError("Potência deve ser maior que zero.")
+            if Va <= 0 or Vb <= 0:
+                raise ValueError("Tensão deve ser maior que zero.")
 
-            a = N1 / N2
-            a2 = a ** 2
+            # Relação de transformação
+            def calcular_relacao_transformacao(N1, N2):
+                return N1 / N2
 
-            def calc_open(V, I, P):
-                if I == 0 or P == 0:
-                    raise ValueError("Corrente e potência devem ser maiores que zero para o circuito aberto.")
-                Rc = (V**2) / P
-                Zphi = V / I
-                under_root = 1 / (Zphi**2) - 1 / (Rc**2)
-                if under_root < 0:
-                    raise ValueError("Impossível calcular Xm: raiz de número negativo.")
-                Xm = 1 / np.sqrt(under_root)
-                return Rc, Xm, Zphi
+            # Converte impedância para o lado escolhido
+            def referir_impedancia(valor, a, lado_ensaio, lado_referido):
+                if lado_ensaio == lado_referido:
+                    return valor
+                elif lado_referido == "primário":
+                    return valor * a ** 2
+                elif lado_referido == "secundário":
+                    return valor / a ** 2
+                return valor
 
-            def calc_short(V, I, P):
-                if I == 0:
-                    raise ValueError("Corrente deve ser maior que zero para o curto-circuito.")
-                Zcc = V / I
-                Req = P / (I**2)
-                under_root = Zcc**2 - Req**2
-                if under_root < 0:
-                    raise ValueError("Impossível calcular Xeq: raiz de número negativo.")
-                Xeq = np.sqrt(under_root)
-                return Req, Xeq, Zcc
+            # Ensaio de circuito aberto
+            def calcular_ensaio_circuito_aberto(Vb, Ib, Pb, a, lado_ensaio, lado_referido):
+                if Ib == 0 or Vb == 0:
+                    return 0, 0, 0, 0, 0
 
-            Rc = Xm = Zphi = Req = Xeq = Rc_prime = Xm_prime = Iphi_prime = Ic = Im = 0
+                Rc = Vb ** 2 / Pb if Pb > 0 else float('inf')
+                Ic = Pb / Vb
+                Im = math.sqrt(Ib ** 2 - Ic ** 2) if Ib > Ic else 0
+                Xm = Vb / Im if Im != 0 else float('inf')
+                Zphi = Vb / Ib if Ib != 0 else float('inf')
 
-            if setA_type == "curto-circuito" and setA_side == "baixo" and setB_type == "circuito-aberto" and setB_side == "alto":
-                Req, Xeq, _ = calc_short(Va, Ia, Pa)
-                Rc, Xm, Zphi = calc_open(Vb, Ib, Pb)
-                Rc_prime = Rc * a2
-                Xm_prime = Xm * a2
-                Iphi_prime = Ib / a
-                Ic = Vb / Rc_prime
-                Im = Vb / Xm_prime
+                # Converte Rc e Xm para o lado referido
+                Rc_ref = referir_impedancia(Rc, a, lado_ensaio, lado_referido)
+                Xm_ref = referir_impedancia(Xm, a, lado_ensaio, lado_referido)
 
-            elif setA_type == "circuito-aberto" and setA_side == "baixo" and setB_type == "curto-circuito" and setB_side == "alto":
-                Rc, Xm, Zphi = calc_open(Va, Ia, Pa)
-                Rc_prime = Rc * a2
-                Xm_prime = Xm * a2
-                Iphi_prime = Ia / a
-                Ic = Va / Rc_prime
-                Im = Va / Xm_prime
-                Req, Xeq, _ = calc_short(Vb, Ib, Pb)
+                return Rc_ref, Xm_ref, Zphi, Ic, Im
 
-            elif setA_type == "curto-circuito" and setA_side == "alto" and setB_type == "circuito-aberto" and setB_side == "baixo":
-                Req, Xeq, _ = calc_short(Va, Ia, Pa)
-                Rc, Xm, Zphi = calc_open(Vb, Ib, Pb)
+            # Ensaio de curto-circuito
+            def calcular_ensaio_curto_circuito(Va, Ia, Pa, a, lado_ensaio, lado_referido):
+                if Ia == 0 or Va == 0:
+                    return 0, 0, 0
 
-            elif setA_type == "circuito-aberto" and setA_side == "alto" and setB_type == "curto-circuito" and setB_side == "baixo":
-                Rc, Xm, Zphi = calc_open(Va, Ia, Pa)
-                Rc_prime = Rc * a2
-                Xm_prime = Xm * a2
-                Iphi_prime = Ia * (N2 / N1)
-                Ic = Va / Rc_prime
-                Im = Va / Xm_prime
-                Req, Xeq, _ = calc_short(Vb, Ib, Pb)
-            else:
-                raise ValueError("Combinação de ensaio A/B inválida ou incompleta.")
+                Req = Pa / Ia ** 2 if Ia != 0 else float('inf')
+                Zcc = Va / Ia
+                Xeq = math.sqrt(Zcc ** 2 - Req ** 2) if Zcc > Req else 0
 
-            Rp = Xp = Rs = Xs = ReqTotal = XeqTotal = None
+                # Converte Req e Xeq para o lado referido
+                Req_ref = referir_impedancia(Req, a, lado_ensaio, lado_referido)
+                Xeq_ref = referir_impedancia(Xeq, a, lado_ensaio, lado_referido)
 
-            if circuit_type == "T":
-                if referred_to == "primário":
-                    Rp = Req / a2
-                    Xp = Xeq / a2
-                    Rs = Req - Rp
-                    Xs = Xeq - Xp
-                elif referred_to == "secundário":
-                    Rp = Req * a2
-                    Xp = Xeq * a2
-                    Rs = Req - Rp
-                    Xs = Xeq - Xp
+                return Req_ref, Xeq_ref, Zcc
 
-            elif circuit_type == "L":
-                if referred_to == "primário":
-                    Rp = Req / a2
-                    Xp = Xeq / a2
-                    ReqTotal = Rp + (Req - Rp)
-                    XeqTotal = Xp + (Xeq - Xp)
-                elif referred_to == "secundário":
-                    Rp = Req * a2
-                    Xp = Xeq * a2
-                    ReqTotal = Rp + (Req - Rp)
-                    XeqTotal = Xp + (Xeq - Xp)
+            # Parâmetros equivalentes para tipos T ou L
+            def calcular_parametros_equivalentes(circuit_type, Req, Xeq):
+                if circuit_type == 'Série':
+                    return Req, Xeq, None, None, None, None
+                elif circuit_type in ['T', 'L']:
+                    Rp = Req / 2
+                    Xp = Xeq / 2
+                    Rs = Req / 2
+                    Xs = Xeq / 2
+                    return None, None, Rp, Xp, Rs, Xs
+                else:
+                    return None, None, None, None, None, None
+            
+            # Relação de transformação
+            a = calcular_relacao_transformacao(N1, N2)
 
-            elif circuit_type == "Série":
-                ReqTotal = Req + (Rc_prime / a2 if Rc_prime else 0)
-                XeqTotal = Xeq + (Xm_prime / a2 if Xm_prime else 0)
+            # Determina o lado de cada ensaio
+            ensaio_ca_lado = "secundário" if sec_type == "circuito-aberto" else "primário"
+            ensaio_cc_lado = "secundário" if sec_type == "curto-circuito" else "primário"
 
+            # Calcula os resultados referidos ao lado selecionado
+            Rc_prime, Xm_prime, Zphi, Ic, Im = calcular_ensaio_circuito_aberto(
+                Vb, Ib, Pb, a, ensaio_ca_lado, referred_to
+            )
+
+            ReqTotal, XeqTotal, Zcc = calcular_ensaio_curto_circuito(
+                Va, Ia, Pa, a, ensaio_cc_lado, referred_to
+            )
+
+            # Calcula os parâmetros individuais se necessário
+            ReqTotal_out, XeqTotal_out, Rp, Xp, Rs, Xs = calcular_parametros_equivalentes(circuit_type, ReqTotal, XeqTotal)
+
+            # Exibição dos resultados
             st.markdown("### Resultados do Transformador")
 
             col1, col2 = st.columns(2)
 
             with col1:
-                st.markdown(f"**Rc (Ω):** {round(Rc, 2)}")
-                st.markdown(f"**Xm (Ω):** {round(Xm, 2)}")
-                st.markdown(f"**Rc Referido (Ω):** {round(Rc_prime, 2) if Rc_prime else '—'}")
-                st.markdown(f"**Xm Referido (Ω):** {round(Xm_prime, 2) if Xm_prime else '—'}")
-                st.markdown(f"**Zphi (Ω):** {round(Zphi, 2)}")
-                st.markdown(f"**Ic (mA):** {round(Ic * 1000, 2) if Ic else '—'}")
-                st.markdown(f"**Im (mA):** {round(Im * 1000, 2) if Im else '—'}")
+                st.subheader("Resultados do Ensaio de Circuito Aberto")
+                ensaio_ca_lado = "secundário" if sec_type == "circuito-aberto" else "primário"
+                st.text(f"Obtido com circuito aberto no lado {ensaio_ca_lado}")
+
+                st.markdown(f"**Rc (Ω)** — resistência do núcleo (perdas no ferro): {round(Rc_prime, 2)}")
+                st.markdown(f"**Xm (Ω)** — reatância magnetizante (campo magnético): {round(Xm_prime, 2)}")
+                st.markdown(f"**Zphi (Ω)** — impedância do circuito aberto: {round(Zphi, 2)}")
+                st.markdown(f"**Ic (mA)** — corrente ativa do núcleo: {round(Ic * 1000, 2)}")
+                st.markdown(f"**Im (mA)** — corrente reativa do núcleo: {round(Im * 1000, 2)}")
 
             with col2:
-                st.markdown(f"**Req (Ω):** {round(Req, 2)}")
-                st.markdown(f"**Xeq (Ω):** {round(Xeq, 2)}")
-                st.markdown(f"**Rp (Ω):** {round(Rp, 2) if Rp else '—'}")
-                st.markdown(f"**Xp (Ω):** {round(Xp, 2) if Xp else '—'}")
-                st.markdown(f"**Rs (Ω):** {round(Rs, 2) if Rs else '—'}")
-                st.markdown(f"**Xs (Ω):** {round(Xs, 2) if Xs else '—'}")
-                st.markdown(f"**Req Total (Ω):** {round(ReqTotal, 2) if ReqTotal else '—'}")
-                st.markdown(f"**Xeq Total (Ω):** {round(XeqTotal, 2) if XeqTotal else '—'}")
+                st.subheader("Resultados do Ensaio de Curto-Circuito")
+                ensaio_cc_lado = "secundário" if sec_type == "curto-circuito" else "primário"
+                st.text(f"Obtido com curto-circuito no lado {ensaio_cc_lado}")
+
+                if circuit_type == 'Série':
+                    st.markdown(f"**Req Total (Ω)** — resistência equivalente total: {round(ReqTotal, 2) if ReqTotal else '—'}")
+                    st.markdown(f"**Xeq Total (Ω)** — reatância equivalente total: {round(XeqTotal, 2) if XeqTotal else '—'}")
+                else:
+                    st.markdown(f"**Rp (Ω)** — resistência do primário: {round(Rp, 2) if Rp else '—'}")
+                    st.markdown(f"**Xp (Ω)** — reatância do primário: {round(Xp, 2) if Xp else '—'}")
+                    st.markdown(f"**Rs (Ω)** — resistência do secundário: {round(Rs, 2) if Rs else '—'}")
+                    st.markdown(f"**Xs (Ω)** — reatância do secundário: {round(Xs, 2) if Xs else '—'}")         
+
+        except Exception as e:
+            st.error(f"Erro: {e}")
 
             st.markdown("### Diagrama Fasorial da Corrente de Excitação")
 

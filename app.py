@@ -540,7 +540,6 @@ with tab3:
     Pb = st.number_input("Potência Pb (W)", min_value=0.0, value=200.0)
 
     if st.button("Calcular Parâmetros"):
-        try:
             # Validar entradas
             if Ia <= 0 or Ib <= 0:
                 raise ValueError("Corrente deve ser maior que zero.")
@@ -657,9 +656,6 @@ with tab3:
                     st.markdown(f"**Rs (Ω)** — resistência do secundário: {round(Rs, 2) if Rs else '—'}")
                     st.markdown(f"**Xs (Ω)** — reatância do secundário: {round(Xs, 2) if Xs else '—'}")         
 
-        except Exception as e:
-            st.error(f"Erro: {e}")
-
             st.markdown("### Diagrama Fasorial da Corrente de Excitação")
 
             if Ic is not None and Im is not None:
@@ -709,15 +705,6 @@ with tab3:
                 st.pyplot(fig)
             else:
                 st.warning("Corrente de excitação inválida ou ausente. Verifique os dados de entrada.")
-
-        except ValueError as ve:
-            st.error(f"Erro de entrada: {ve}")
-
-        except ZeroDivisionError:
-            st.error("Erro: Divisão por zero detectada.")
-
-        except Exception as e:
-            st.error(f"Erro inesperado: {e}")
 
 with tab4:
     st.header("Desafio 4 - Regulação de Tensão")

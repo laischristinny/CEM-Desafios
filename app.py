@@ -707,25 +707,78 @@ with tab3:
                 st.warning("Corrente de excitação inválida ou ausente. Verifique os dados de entrada.")
 
 with tab4:
-    st.header("Desafio 4 - Regulação de Tensão")
-    I2 = st.number_input("Corrente de carga I2 (A)", value=5.0)
-    V2 = st.number_input("Tensão no secundário V2 (V)", value=220.0)
-    R_eq = st.number_input("Resistência equivalente R_eq (Ω)", value=0.5)
-    X_eq = st.number_input("Reatância equivalente X_eq (Ω)", value=1.2)
-    cos_phi = st.number_input("Fator de potência cosφ", value=0.85, min_value=0.0, max_value=1.0)
-    sin_phi = np.sqrt(1 - cos_phi**2)
+    st.title("Desafio 4 - Regulação de Tensão")
+
+    # Entradas
+    I2      = st.number_input("Corrente de carga I2 (A)", value=5.0)
+    V2      = st.number_input("Tensão no secundário V2 (V)", value=220.0)
+    R_eq    = st.number_input("Resistência equivalente R_eq (Ω)", value=0.5)
+    X_eq    = st.number_input("Reatância equivalente X_eq (Ω)", value=1.2)
+    cos_phi = st.number_input("Fator de potência cosφ", value=0.85)
+
+    # Cálculo do seno
+    if abs(cos_phi) <= 1:
+        sin_phi = np.sqrt(1 - cos_phi**2)
+        sin_phi = -sin_phi if cos_phi < 0 else sin_phi
+    else:
+        sin_phi = 0.0
+
+    # Regulação
     regulacao = (I2 * (R_eq * cos_phi + X_eq * sin_phi)) / V2 * 100
     st.write(f"Regulação estimada: **{regulacao:.2f}%**")
+
+    # Vetores
     V2_vec = np.array([V2, 0])
-    VR = np.array([R_eq * I2 * cos_phi, R_eq * I2 * sin_phi])
-    VX = np.array([-X_eq * I2 * sin_phi, X_eq * I2 * cos_phi])
-    V1 = V2_vec + VR + VX
+    VR     = np.array([R_eq * I2 * cos_phi, R_eq * I2 * sin_phi])
+    VX     = np.array([-X_eq * I2 * sin_phi, X_eq * I2 * cos_phi])
+    V1     = V2_vec + VR + VX
+
+    # Função para desenhar linha + anotação deslocada
+    def draw_line_and_label(fig, start, vec, label, color, xshift, yshift):
+        end = start + vec
+        # Desenha apenas a linha
+        fig.add_trace(go.Scatter(
+            x=[start[0], end[0]],
+            y=[start[1], end[1]],
+            mode="lines",
+            line=dict(color=color, width=3),
+            showlegend=False,
+        ))
+        # Adiciona o rótulo via annotation
+        fig.add_annotation(
+            x=end[0], y=end[1],
+            xref="x", yref="y",
+            text=label,
+            font=dict(color=color, size=14),
+            showarrow=False,
+            xshift=xshift,
+            yshift=yshift,
+            align="center"
+        )
+        return end
+
+    # Build figure
     fig = go.Figure()
-    def arrow(name, vec, color):
-        fig.add_trace(go.Scatter(x=[0, vec[0]], y=[0, vec[1]], mode="lines+text", name=name, line=dict(width=3, color=color), text=[None, name], textposition="top center"))
-    arrow("V₂", V2_vec, "green")
-    arrow("I·R_eq", VR, "blue")
-    arrow("j·I·X_eq", VX, "orange")
-    arrow("V₁ (aprox)", V1, "red")
-    fig.update_layout(title="Diagrama Fasorial", xaxis_title="Eixo Real", yaxis_title="Eixo Imaginário", width=600, height=400, showlegend=True)
+    origin = np.array([0, 0])
+
+    # Desenha vetores encadeados
+    p1 = draw_line_and_label(fig, origin, V2_vec,    "V₂",        "lime",  xshift=0,  yshift=-10)
+    p2 = draw_line_and_label(fig, p1,     VR,        "I·R_eq",    "cyan",  xshift=20,   yshift=10)
+    p3 = draw_line_and_label(fig, p2,     VX,        "j·I·X_eq",  "orange",xshift=30,   yshift=0)
+    _  = draw_line_and_label(fig, origin, V1,        "V₁ (aprox)", "red",  xshift=0, yshift=20)
+
+    # Layout escuro
+    fig.update_layout(
+        title="Diagrama Fasorial",
+        xaxis_title="Eixo Real",
+        yaxis_title="Eixo Imaginário",
+        plot_bgcolor="black",
+        paper_bgcolor="black",
+        font=dict(color="white"),
+        width=800, height=600,
+        xaxis=dict(color='white', showgrid=True, scaleanchor="y"),
+        yaxis=dict(color='white', showgrid=True),
+        margin=dict(l=40, r=40, t=80, b=40),
+    )
+
     st.plotly_chart(fig)

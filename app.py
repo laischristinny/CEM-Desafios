@@ -194,12 +194,14 @@ with tab1:
     # ======= VISUALIZAÇÃO 3D =======
 
     def criar_seções_do_transformador(x, y, z, dx, dy, dz):
+        # Cria os 8 vértices de um paralelepípedo 3D (um bloco retangular) que representa partes do transformador (núcleo ou bobinas).
         return np.array([
             [x, y, z], [x + dx, y, z], [x + dx, y + dy, z], [x, y + dy, z], # Vértices 0,1,2,3 (base)
             [x, y, z + dz], [x + dx, y, z + dz], [x + dx, y + dy, z + dz], [x, y + dy, z + dz] # Vértices 4,5,6,7 (topo)
         ])
     
     def rotacionar_transformador(vertices, angle_rad):
+        # Aplica uma rotação nos vértices 3D para mudar o ângulo de visualização do transformador.
         if np.isclose(angle_rad, np.pi/2): # Rotação específica x->y, y->z, z->x (se essa for a intenção)
             rotation_matrix = np.array([
                 [0, 1, 0], # y_velho para x_novo
@@ -219,6 +221,7 @@ with tab1:
         return np.dot(vertices, rotation_matrix.T)
         
     def plot_transformador(fig, vertices, color='gray', opacity=0.6):
+        # Desenha um paralelepípedo 3D
         vx = vertices[:, 0]
         vy = vertices[:, 1]
         vz = vertices[:, 2]
@@ -363,6 +366,7 @@ with tab1:
 
 
     def gerar_visu_transformador(angle_rad, a, b, V1_tensões, V2_tensões):
+        # Constrói toda a estrutura 3D do transformador.
         fig = go.Figure()
 
         largura_perna_central_x = a * 0.8
@@ -540,6 +544,7 @@ with tab3:
     Pb = st.number_input("Potência Pb (W)", min_value=0.0, value=200.0)
 
     if st.button("Calcular Parâmetros"):
+        try:
             # Validar entradas
             if Ia <= 0 or Ib <= 0:
                 raise ValueError("Corrente deve ser maior que zero.")
@@ -656,6 +661,9 @@ with tab3:
                     st.markdown(f"**Rs (Ω)** — resistência do secundário: {round(Rs, 2) if Rs else '—'}")
                     st.markdown(f"**Xs (Ω)** — reatância do secundário: {round(Xs, 2) if Xs else '—'}")         
 
+        except Exception as e:
+            st.error(f"Erro: {e}")
+
             st.markdown("### Diagrama Fasorial da Corrente de Excitação")
 
             if Ic is not None and Im is not None:
@@ -705,6 +713,15 @@ with tab3:
                 st.pyplot(fig)
             else:
                 st.warning("Corrente de excitação inválida ou ausente. Verifique os dados de entrada.")
+
+        except ValueError as ve:
+            st.error(f"Erro de entrada: {ve}")
+
+        except ZeroDivisionError:
+            st.error("Erro: Divisão por zero detectada.")
+
+        except Exception as e:
+            st.error(f"Erro inesperado: {e}")
 
 with tab4:
     st.header("Desafio 4 - Regulação de Tensão")

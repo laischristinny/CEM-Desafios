@@ -12,9 +12,24 @@ st.title("App de Transformadores - Desafios")
 tab1, tab2, tab3, tab4 = st.tabs(["Desafio 1 - Dimensionamento", "Desafio 2 - Magnetização", "Desafio 3 - Transformador Monofásico", "Desafio 4 - Regulação de Tensão"])
 
 with tab1:
-    # ======= ENTRADAS =======
+    # ======= INICIALIZAÇÃO DO ESTADO DA SESSÃO =======
+    # Garante que as variáveis de estado existam para evitar erros.
+    if 'tipo_lamina_sugerido' not in st.session_state:
+        st.session_state.tipo_lamina_sugerido = None
+    if 'a_min_sugerido' not in st.session_state:
+        st.session_state.a_min_sugerido = 0.0
 
+    # ======= ENTRADAS =======
     st.header("Dados de entrada")
+
+    # Define o tipo de lâmina com base no estado da sessão ou no padrão
+    default_lamina_type = "Padronizada"
+    if st.session_state.tipo_lamina_sugerido:
+        default_lamina_type = st.session_state.tipo_lamina_sugerido
+
+    # Obtém o índice do tipo de lâmina padrão para o selectbox
+    lamina_options = ["Padronizada", "Comprida"]
+    default_index = lamina_options.index(default_lamina_type)
 
     tipo_transformador = st.selectbox(
         "Tipo de Transformador",
@@ -27,49 +42,50 @@ with tab1:
     V1_input = st.text_input("Tensão Primária (V1) em V (use / para múltiplos)", value="120")
     V2_input = st.text_input("Tensão Secundária (V2) em V (use / para múltiplos)", value="220")
 
-    V1_list = [int(v.strip()) for v in V1_input.split("/") if v.strip().isdigit()]
-    V2_list = [int(v.strip()) for v in V2_input.split("/") if v.strip().isdigit()]
     W2 = st.number_input("Potência (W2) em VA", value=300)
     f = st.number_input("Frequência em Hz", value=50)
-    tipo_de_lamina = st.selectbox("Tipo de Lâmina do Núcleo", ["Padronizada", "Comprida"])
+    tipo_de_lamina = st.selectbox("Tipo de Lâmina do Núcleo", lamina_options, index=default_index)
+
+    materiais_nucleo = {
+        "Aço Silício GNO (Padrão)": 11300,
+        "Aço Silício GO (Alto Rendimento)": 17000,
+        "Aço Doce (Baixo Carbono)": 9000,
+        "Ferrite Magnético": 4250,
+        "Nanocristalino": 15000,
+        "Liga Amorfa (Metglas)": 13500,
+        "Ferro Puro (99,8%)": 20000
+    }
+
+    # Seletor de material do núcleo
+    material_escolhido = st.selectbox(
+        "Material do Núcleo",
+        options=list(materiais_nucleo.keys())
+    )
 
     # ======= CÁLCULOS =======
-
-    W1 = 1.1 * W2  # Potência primária
-    I1 = [round(W1 / v, 2) for v in V1_list] # Corrente primária
-    d = 3 if W2 <= 500 else 2.5 if W2 <= 1000 else 2 # Densidade da corrente
-    S1 = [round(i / d, 2) for i in I1] # Seção do condutor primário
-
-    I2 = [round(W2 / v, 2) for v in V2_list] # Corrente secundária
-    S2 = [round(i / d, 2) for i in I2] # Seção do condutor secundário
+    W1 = 1.1 * W2
+    V1_list = [int(v.strip()) for v in V1_input.split("/") if v.strip().isdigit()]
+    V2_list = [int(v.strip()) for v in V2_input.split("/") if v.strip().isdigit()]
+    I1 = [round(W1 / v, 2) for v in V1_list]
+    d = 3 if W2 <= 500 else 2.5 if W2 <= 1000 else 2
+    S1 = [round(i / d, 2) for i in I1]
+    I2 = [round(W2 / v, 2) for v in V2_list]
+    S2 = [round(i / d, 2) for i in I2]
 
     awg_table = [
-        {"AWG": 25, "area_mm2": 0.162},
-        {"AWG": 24, "area_mm2": 0.205},
-        {"AWG": 23, "area_mm2": 0.258},
-        {"AWG": 22, "area_mm2": 0.326},
-        {"AWG": 21, "area_mm2": 0.410},
-        {"AWG": 20, "area_mm2": 0.518},
-        {"AWG": 19, "area_mm2": 0.653},
-        {"AWG": 18, "area_mm2": 0.823},
-        {"AWG": 17, "area_mm2": 1.04},
-        {"AWG": 16, "area_mm2": 1.31},
-        {"AWG": 15, "area_mm2": 1.65},
-        {"AWG": 14, "area_mm2": 2.08},
-        {"AWG": 13, "area_mm2": 2.62},
-        {"AWG": 12, "area_mm2": 3.31},
-        {"AWG": 11, "area_mm2": 4.17},
-        {"AWG": 10, "area_mm2": 5.26},
-        {"AWG": 9,  "area_mm2": 6.63},
-        {"AWG": 8,  "area_mm2": 8.37},
-        {"AWG": 7,  "area_mm2": 10.55},
-        {"AWG": 6,  "area_mm2": 13.30},
-        {"AWG": 5,  "area_mm2": 16.80},
-        {"AWG": 4,  "area_mm2": 21.15},
-        {"AWG": 3,  "area_mm2": 26.67},
-        {"AWG": 2,  "area_mm2": 33.62},
-        {"AWG": 1,  "area_mm2": 42.41},
-        {"AWG": 0,  "area_mm2": 53.49},
+        {"AWG": 25, "area_mm2": 0.162}, {"AWG": 24, "area_mm2": 0.205},
+        {"AWG": 23, "area_mm2": 0.258}, {"AWG": 22, "area_mm2": 0.326},
+        {"AWG": 21, "area_mm2": 0.410}, {"AWG": 20, "area_mm2": 0.518},
+        {"AWG": 19, "area_mm2": 0.653}, {"AWG": 18, "area_mm2": 0.823},
+        {"AWG": 17, "area_mm2": 1.04}, {"AWG": 16, "area_mm2": 1.31},
+        {"AWG": 15, "area_mm2": 1.65}, {"AWG": 14, "area_mm2": 2.08},
+        {"AWG": 13, "area_mm2": 2.62}, {"AWG": 12, "area_mm2": 3.31},
+        {"AWG": 11, "area_mm2": 4.17}, {"AWG": 10, "area_mm2": 5.26},
+        {"AWG": 9,  "area_mm2": 6.63}, {"AWG": 8,  "area_mm2": 8.37},
+        {"AWG": 7,  "area_mm2": 10.55}, {"AWG": 6,  "area_mm2": 13.30},
+        {"AWG": 5,  "area_mm2": 16.80}, {"AWG": 4,  "area_mm2": 21.15},
+        {"AWG": 3,  "area_mm2": 26.67}, {"AWG": 2,  "area_mm2": 33.62},
+        {"AWG": 1,  "area_mm2": 42.41}, {"AWG": 0,  "area_mm2": 53.49},
     ]
 
     def encontrar_awg_por_secao(secao_mm2):
@@ -92,27 +108,28 @@ with tab1:
     }[tipo_transformador]
 
     coef = 7.5 if tipo_de_lamina == "Padronizada" else 6
-    Sm = round(coef * math.sqrt((fator_tipo * W2) / f), 1) # Seção magnética do núcleo
-    Sg = round(Sm * 1.1, 1)  # Seção geométrica do núcleo
+    Sm = round(coef * math.sqrt((fator_tipo * W2) / f), 1)
+    Sg = round(Sm * 1.1, 1)
 
-    a = math.ceil(math.sqrt(Sg)) # Largura da coluna central  do transformador
-    b = round(Sg / a)  # Comprimento do pacote laminado
+    a_calculado = math.ceil(math.sqrt(Sg))
+    a = max(a_calculado, st.session_state.a_min_sugerido)
+    b = round(Sg / a)
 
-    # Função para seleção de lâminas
+    laminas_padronizadas = [
+        {"numero": 0, "a_cm": 1.5, "secao_mm2": 168, "peso_kgcm": 0.095},
+        {"numero": 1, "a_cm": 2, "secao_mm2": 300, "peso_kgcm": 0.170},
+        {"numero": 2, "a_cm": 2.5, "secao_mm2": 468, "peso_kgcm": 0.273},
+        {"numero": 3, "a_cm": 3, "secao_mm2": 675, "peso_kgcm": 0.380},
+        {"numero": 4, "a_cm": 3.5, "secao_mm2": 900, "peso_kgcm": 0.516},
+        {"numero": 5, "a_cm": 4, "secao_mm2": 1200, "peso_kgcm": 0.674},
+        {"numero": 6, "a_cm": 5, "secao_mm2": 1880, "peso_kgcm": 1.053}
+    ]
+    laminas_compridas = [
+        {"numero": 5, "a_cm": 4, "secao_mm2": 2400, "peso_kgcm": 1.000},
+        {"numero": 6, "a_cm": 5, "secao_mm2": 3750, "peso_kgcm": 1.580}
+    ]
+    
     def selecionar_lamina(a, tipo):
-        laminas_padronizadas = [
-            {"numero": 0, "a_cm": 1.5, "secao_mm2": 168, "peso_kgcm": 0.095},
-            {"numero": 1, "a_cm": 2, "secao_mm2": 300, "peso_kgcm": 0.170},
-            {"numero": 2, "a_cm": 2.5, "secao_mm2": 468, "peso_kgcm": 0.273},
-            {"numero": 3, "a_cm": 3, "secao_mm2": 675, "peso_kgcm": 0.380},
-            {"numero": 4, "a_cm": 3.5, "secao_mm2": 900, "peso_kgcm": 0.516},
-            {"numero": 5, "a_cm": 4, "secao_mm2": 1200, "peso_kgcm": 0.674},
-            {"numero": 6, "a_cm": 5, "secao_mm2": 1880, "peso_kgcm": 1.053}
-        ]
-        laminas_compridas = [
-            {"numero": 5, "a_cm": 4, "secao_mm2": 2400, "peso_kgcm": 1.000},
-            {"numero": 6, "a_cm": 5, "secao_mm2": 3750, "peso_kgcm": 1.580}
-        ]
         laminas = laminas_padronizadas if tipo == "Padronizada" else laminas_compridas
         for lamina in laminas:
             if a <= lamina["a_cm"]:
@@ -121,19 +138,16 @@ with tab1:
 
     numero_lamina = selecionar_lamina(a, tipo_de_lamina)
     a = numero_lamina["a_cm"]
-    # Dimensões efetivas do nucleo central
     SgEfetivo = a * b
     SmEfetivo = round(SgEfetivo / 1.1, 2)
 
-    if f == 50:
-        EspVolt = round(40 / SmEfetivo, 2)
-    elif f == 60:
-        EspVolt = round(33.5 / SmEfetivo, 2)
-    else:
-        EspVolt = round((1e8 / (4.44 * 11300 * f)) / SmEfetivo, 2)
+    B_max = materiais_nucleo[material_escolhido]
 
-    N1 = math.ceil(EspVolt * V1_list[0])  # Espiras do primário
-    N2 = math.ceil(EspVolt * V2_list[0] * 1.1) # Espiras do secundário
+    x = 1e8 / (4.44 * B_max * f)
+    EspVolt = round(x / SmEfetivo, 4)
+
+    N1 = math.ceil(EspVolt * V1_list[0])
+    N2 = math.ceil(EspVolt * V2_list[0] * 1.1)
 
     if len(S1) >= 2 and len(S2) >= 2:
         Scu = N1 * fio_awg_s1_1['area_mm2'] + N1 * fio_awg_s1_2['area_mm2'] + N2 * fio_awg_s2_1['area_mm2'] + N2 * fio_awg_s2_2['area_mm2']
@@ -144,119 +158,137 @@ with tab1:
     else:
         Scu = N1 * fio_awg_s1_1['area_mm2'] + N2 * fio_awg_s2_1['area_mm2']
 
-    Sj = numero_lamina["secao_mm2"] # Seção da janela
+    Sj = numero_lamina["secao_mm2"]
     executavel = Sj / Scu
-
-    Pfe = numero_lamina["peso_kgcm"] * b # Peso do ferro
-    lm = (2 * a) + (2 * b) + (0.5 * a * math.pi)  # Comprimento da espira média do cobre
-    Pcu = (Scu / 100 * lm * 9) / 1000 # Peso do cobre
+    Pfe = numero_lamina["peso_kgcm"] * b
+    lm = (2 * a) + (2 * b) + (0.5 * a * math.pi)
+    Pcu = (Scu / 100 * lm * 9) / 1000
 
     # ======= RESULTADOS =======
-
     st.header("Resultados do Dimensionamento")
 
-    st.subheader("Número de Espiras")
-    st.write(f"Primário: {N1} espiras")
-    st.write(f"Secundário: {N2} espiras")
+    # --- LINHA 1: Espiras e Lâmina ---
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Número de Espiras")
+        st.write(f"**Primário:** {N1} espiras")
+        st.write(f"**Secundário:** {N2} espiras")
 
-    st.subheader("Bitola dos Cabos")
-    st.write(f"Tipo de fio AWG para S1 Primário 1: {fio_awg_s1_1['AWG']}, cuja seção é  {fio_awg_s1_1['area_mm2']}")
-    st.write(f"Tipo de fio AWG para S2 Secundário 1: {fio_awg_s2_1['AWG']}, cuja seção é  {fio_awg_s2_1['area_mm2']}")
-    if len(S1) >= 2:
-        st.write(f"Tipo de fio AWG para S1 Primário 2: {fio_awg_s1_2['AWG']}, cuja seção é  {fio_awg_s1_2['area_mm2']}")
-    if len(S2) >= 2:
-        st.write(f"Tipo de fio AWG para S2 Secundário 2: {fio_awg_s2_2['AWG']}, cuja seção é  {fio_awg_s2_2['area_mm2']}")
+    with col2:
+        st.subheader("Lâmina do Núcleo")
+        st.write(f"**Tipo:** Nº {numero_lamina['numero']} ({tipo_de_lamina})")
+        st.write(f"**Seção da Janela (Sj):** {numero_lamina['secao_mm2']} mm²")
+        st.write(f"**Quantidade (empilhamento b):** {b:.1f} cm")
 
-    for i, (v, s) in enumerate(zip(V1_list, S1)):
-        st.write(f"Primário {i+1} ({v} V): {s:.2f} mm²")
-    for i, (v, s) in enumerate(zip(V2_list, S2)):
-        st.write(f"Secundário {i+1} ({v} V): {s:.2f} mm²")
+    st.divider()
 
-    st.subheader("Lâmina do Núcleo")
-    st.write(f"Tipo de lâmina selecionada: Nº {numero_lamina['numero']} com seção {numero_lamina['secao_mm2']} mm²")
-    st.write(f"Quantidade de lâminas aproximada (baseado no comprimento b): {b} unidades")
+    # --- LINHA 2: Bitola e Dimensões ---
+    col3, col4 = st.columns(2)
+    with col3:
+        st.subheader("Bitola dos Cabos (AWG)")
+        st.write(f"**Primário 1 ({V1_list[0]}V):** {fio_awg_s1_1['AWG']} ({fio_awg_s1_1['area_mm2']} mm²)")
+        if len(S1) >= 2:
+            st.write(f"**Primário 2 ({V1_list[1]}V):** {fio_awg_s1_2['AWG']} ({fio_awg_s1_2['area_mm2']} mm²)")
+        st.write(f"**Secundário 1 ({V2_list[0]}V):** {fio_awg_s2_1['AWG']} ({fio_awg_s2_1['area_mm2']} mm²)")
+        if len(S2) >= 2:
+            st.write(f"**Secundário 2 ({V2_list[1]}V):** {fio_awg_s2_2['AWG']} ({fio_awg_s2_2['area_mm2']} mm²)")
 
-    st.subheader("Dimensões do Transformador")
-    st.write(f"Largura da coluna central (a): {a} cm")
-    st.write(f"Comprimento do pacote laminado (b): {b} cm")
-    st.write(f"Seção geométrica efetiva do núcleo (SgEfetivo): {SgEfetivo:.2f} cm²")
-    st.write(f"Seção magnética efetiva do núcleo (SmEfetivo): {SmEfetivo:.2f} cm²")
+    with col4:
+        st.subheader("Dimensões do Núcleo")
+        st.write(f"**Largura da coluna central (a):** {a} cm")
+        st.write(f"**Seção Geométrica Efetiva (Sg):** {SgEfetivo:.2f} cm²")
+        st.write(f"**Seção Magnética Efetiva (Sm):** {SmEfetivo:.2f} cm²")
 
-    st.subheader("Peso do Transformador")
-    st.write(f"Peso do núcleo de ferro (Pfe): {Pfe:.2f} kg")
-    st.write(f"Peso estimado do cobre (Pcu): {Pcu:.2f} kg")
+    st.divider()
 
+    # --- LINHA 3: Peso e Viabilidade ---
+    col5, col6 = st.columns(2)
+    with col5:
+        st.subheader("Peso Estimado")
+        st.write(f"**Núcleo de ferro (Pfe):** {Pfe:.2f} kg")
+        st.write(f"**Enrolamento de cobre (Pcu):** {Pcu:.2f} kg")
+
+    with col6:
+        st.subheader("Análise de Viabilidade")
+        st.write(f"**Área total do cobre (Scu):** {Scu:.2f} mm²")
+        st.write(f"**Área da janela da lâmina (Sj):** {Sj} mm²")
+        st.metric(label="Relação Sj / Scu", value=f"{executavel:.2f}", help="Um valor >= 3 é considerado ideal.")
+
+    st.divider()
+
+    # ======= LÓGICA DE EXECUTABILIDADE =======
     if executavel >= 3:
-        st.success("Transformador é executável conforme critério de relação Sj/Scu >= 3.")
+        st.success("✅ **Transformador Executável:** A relação entre a área da janela e a área do cobre (Sj/Scu) está dentro do critério aceitável.")
+        st.session_state.a_min_sugerido = 0.0
+        st.session_state.tipo_lamina_sugerido = None
     else:
-        st.warning("Transformador não executável.")
+        st.warning(f"❌ **TRANSFORMADOR NÃO EXECUTÁVEL (Sj/Scu = {executavel:.2f})**")
+        st.info("A área da janela do núcleo (Sj) é muito pequena para a quantidade de cobre (Scu) necessária. Para resolver, você pode:")
+
+        col_acao1, col_acao2 = st.columns(2)
+        
+        with col_acao1:
+            st.write("**Opção 1: Aumentar o tamanho do núcleo**")
+            st.write("Escolher uma lâmina maior aumentará a área da janela (Sj).")
+            
+            laminas_atuais = laminas_padronizadas if tipo_de_lamina == "Padronizada" else laminas_compridas
+            indice_atual = next((i for i, item in enumerate(laminas_atuais) if item["numero"] == numero_lamina["numero"]), None)
+            
+            if indice_atual is not None and indice_atual + 1 < len(laminas_atuais):
+                proxima_lamina = laminas_atuais[indice_atual + 1]
+                if st.button(f"Usar próxima lâmina (Nº {proxima_lamina['numero']})"):
+                    st.session_state.a_min_sugerido = proxima_lamina['a_cm']
+                    st.rerun()
+            else:
+                st.error("Não há lâmina maior disponível neste tipo.")
+
+        with col_acao2:
+            if tipo_de_lamina == "Padronizada":
+                st.write("**Opção 2: Usar lâmina 'Comprida'**")
+                st.write("Lâminas do tipo 'Comprida' oferecem uma seção de janela maior para o mesmo tamanho.")
+                if st.button("Alternar para lâmina 'Comprida'"):
+                    st.session_state.tipo_lamina_sugerido = "Comprida"
+                    st.session_state.a_min_sugerido = 0.0
+                    st.rerun()
 
     # ======= VISUALIZAÇÃO 3D =======
 
     def criar_seções_do_transformador(x, y, z, dx, dy, dz):
         return np.array([
-            [x, y, z], [x + dx, y, z], [x + dx, y + dy, z], [x, y + dy, z], # Vértices 0,1,2,3 (base)
-            [x, y, z + dz], [x + dx, y, z + dz], [x + dx, y + dy, z + dz], [x, y + dy, z + dz] # Vértices 4,5,6,7 (topo)
+            [x, y, z], [x + dx, y, z], [x + dx, y + dy, z], [x, y + dy, z],
+            [x, y, z + dz], [x + dx, y, z + dz], [x + dx, y + dy, z + dz], [x, y + dy, z + dz]
         ])
     
     def rotacionar_transformador(vertices, angle_rad):
-        if np.isclose(angle_rad, np.pi/2): # Rotação específica x->y, y->z, z->x (se essa for a intenção)
-            rotation_matrix = np.array([
-                [0, 1, 0], # y_velho para x_novo
-                [0, 0, 1], # z_velho para y_novo
-                [1, 0, 0]  # x_velho para z_novo
-            ])
+        if np.isclose(angle_rad, np.pi/2):
+            rotation_matrix = np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]])
         elif np.isclose(angle_rad, 0):
             rotation_matrix = np.eye(3)
         else:
-            rotation_matrix = np.array([ # Matriz original do usuário
-                [np.cos(angle_rad), 1, 0],
-                [0, -np.cos(angle_rad), 1],
-                [np.sin(angle_rad), np.cos(angle_rad), 0]
+            rotation_matrix = np.array([
+                [np.cos(angle_rad), 1, 0], [0, -np.cos(angle_rad), 1], [np.sin(angle_rad), np.cos(angle_rad), 0]
             ])
         if vertices.ndim == 1:
             vertices = vertices.reshape(1,3)
         return np.dot(vertices, rotation_matrix.T)
         
     def plot_transformador(fig, vertices, color='gray', opacity=0.6):
-        vx = vertices[:, 0]
-        vy = vertices[:, 1]
-        vz = vertices[:, 2]
-
-        # Faces do paralelepípedo (cada face é uma lista de 4 índices de vértices)
-        # Ordem: Base, Topo, Frente, Trás, Esquerda, Direita
+        vx, vy, vz = vertices[:, 0], vertices[:, 1], vertices[:, 2]
         faces_quad = [
-            [0, 1, 2, 3],  # Base
-            [4, 5, 6, 7],  # Topo (corrigido para usar 4,5,6,7 no sentido horário ou anti-horário consistente) -> 7,6,5,4 ou 4,5,6,7
-            [0, 1, 5, 4],  # Frente
-            [3, 2, 6, 7],  # Trás
-            [0, 3, 7, 4],  # Esquerda
-            [1, 2, 6, 5]   # Direita
+            [0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4],
+            [3, 2, 6, 7], [0, 3, 7, 4], [1, 2, 6, 5]
         ]
-        
         i_tri, j_tri, k_tri = [], [], []
         for face in faces_quad:
-            # Triângulo 1 da face: v0, v1, v2
-            i_tri.append(face[0])
-            j_tri.append(face[1])
-            k_tri.append(face[2])
-            # Triângulo 2 da face: v0, v2, v3
-            i_tri.append(face[0])
-            j_tri.append(face[2])
-            k_tri.append(face[3])
+            i_tri.extend([face[0], face[0]])
+            j_tri.extend([face[1], face[2]])
+            k_tri.extend([face[2], face[3]])
 
         fig.add_trace(go.Mesh3d(
-            x=vx, y=vy, z=vz,
-            i=i_tri, j=j_tri, k=k_tri,
-            opacity=opacity, color=color, flatshading=True,
-            alphahull=0 # Garante que usemos os triângulos definidos
+            x=vx, y=vy, z=vz, i=i_tri, j=j_tri, k=k_tri,
+            opacity=opacity, color=color, flatshading=True, alphahull=0
         ))
-
-        # Arestas para melhor definição
-        edges = [
-            (0,1), (1,2), (2,3), (3,0), (4,5), (5,6), (6,7), (7,4),
-            (0,4), (1,5), (2,6), (3,7)
-        ]
+        edges = [(0,1), (1,2), (2,3), (3,0), (4,5), (5,6), (6,7), (7,4), (0,4), (1,5), (2,6), (3,7)]
         edge_x, edge_y, edge_z = [], [], []
         for p1_idx, p2_idx in edges:
             edge_x.extend([vertices[p1_idx,0], vertices[p2_idx,0], None])
@@ -267,148 +299,97 @@ with tab1:
             line=dict(color='darkslategrey', width=2.5), showlegend=False
         ))
 
+    def desenhar_uma_bobina(fig, num_espiras, radius, z_min, z_max, center_x, center_y, color, name, angle_rad_para_rotacao):
+        if num_espiras <= 0 or radius <= 0:
+            return
+        n_pontos = int(num_espiras * 20) + 10
+        z_vals = np.linspace(z_min, z_max, n_pontos)
+        angle_param = np.linspace(0, num_espiras * 2 * np.pi, n_pontos)
+        x_coil_orig = center_x + radius * np.cos(angle_param)
+        y_coil_orig = center_y + radius * np.sin(angle_param)
+        points = np.vstack((x_coil_orig, y_coil_orig, z_vals)).T
+        vertices_rot = rotacionar_transformador(points, angle_rad_para_rotacao)
+        fig.add_trace(go.Scatter3d(
+            x=vertices_rot[:,0], y=vertices_rot[:,1], z=vertices_rot[:,2],
+            mode='lines', line=dict(color=color, width=3.5), name=name
+        ))
 
-    def add_espiras(fig, angle_rad_para_rotacao, a_param_geral, # Passando 'a' para referência de tamanho
-                V1_voltages, V2_voltages,
+    def add_espiras(fig, angle_rad_para_rotacao, a_param_geral,
+                N1_espiras, N2_espiras,
                 z_min_coil, z_max_coil,
                 center_x_p, center_y_p, perna_dx_p, perna_dy_p,
                 center_x_s, center_y_s, perna_dx_s, perna_dy_s):
 
-        def calcular_max_voltage(V1, V2):
-            all_v = V1 + V2
-            if not all_v: return 1.0
-            positivos = [v for v in all_v if v > 0]
-            return max(max(positivos) if positivos else 1.0, 1.0)
+        if isinstance(N1_espiras, (int, float)):
+            N1_espiras = [int(N1_espiras)]
+        if isinstance(N2_espiras, (int, float)):
+            N2_espiras = [int(N2_espiras)]
 
         def calcular_radii_adjusted(num_coils, perna_dx, perna_dy, a_ref_dim):
             if num_coils == 0: return []
-
-            # Folga entre a superfície da perna e a primeira camada de espiras (carretel visual)
-            folga_carretel_visual = a_ref_dim * 0.05 # Ex: 5% de 'a'
-
-            # O raio da primeira espira (a mais interna, mas externa à perna)
-            # Este é o raio até o centro do "fio" da primeira espira.
+            folga_carretel_visual = a_ref_dim * 0.05
             raio_primeira_espira = max(perna_dx / 2.0, perna_dy / 2.0) + folga_carretel_visual
-
             if num_coils == 1:
-                # Se só uma espira, adicionamos uma pequena espessura visual para o fio
-                return [raio_primeira_espira + a_ref_dim * 0.02] 
-
-            # Espessura radial total do pacote de bobinas (todas as camadas)
-            espessura_pacote_total_visual = a_ref_dim * 0.20 # Ex: 20% de 'a'
-            if num_coils > 3: # Se muitas espiras, pode precisar de um pacote mais grosso
-                espessura_pacote_total_visual = a_ref_dim * (0.15 + num_coils * 0.03) # Aumenta com o número
-                espessura_pacote_total_visual = min(espessura_pacote_total_visual, a_ref_dim * 0.5) # Limita
-
+                return [raio_primeira_espira + a_ref_dim * 0.02]
+            espessura_pacote_total_visual = a_ref_dim * 0.20
+            if num_coils > 3:
+                espessura_pacote_total_visual = min(a_ref_dim * (0.15 + num_coils * 0.03), a_ref_dim * 0.5)
             raio_ultima_espira = raio_primeira_espira + espessura_pacote_total_visual
-            
-            # Garante que os raios sejam positivos e que o último seja maior que o primeiro
-            if raio_primeira_espira <= 0.01: raio_primeira_espira = 0.01 
-            if raio_ultima_espira <= raio_primeira_espira:
-                raio_ultima_espira = raio_primeira_espira + a_ref_dim * 0.05 # Garante um pacote mínimo
-
             return np.linspace(raio_primeira_espira, raio_ultima_espira, num_coils).tolist()
-
-        def desenhar_bobinas_coords(voltages, radii, z_min, z_max, max_v_ref, base_angle_mult, c_x, c_y):
-            all_coils_points = []
-            for i, v_val in enumerate(voltages):
-                if i >= len(radii): continue
-                r = radii[i]
-                if r <= 0: continue
+        
+        # Desenha as bobinas do primário
+        if N1_espiras:
+            radii_p = calcular_radii_adjusted(len(N1_espiras), perna_dx_p, perna_dy_p, a_param_geral)
+            for idx, num_espiras in enumerate(N1_espiras):
+                if idx >= len(radii_p): continue
                 
-                rel_v = v_val / max_v_ref
-                min_scale, max_scale = 0.5, 1.5 # densidade não usada diretamente no angulo aqui
-                # densidade = max(min_scale, min(max_scale, min_scale + (max_scale - min_scale) * rel_v))
-                n_pontos = max(int(80 * rel_v) + 25, 25) # Aumentado para mais suavidade
-                z_vals = np.linspace(z_min, z_max, n_pontos)
-                # ângulo para ter voltas visíveis, densidade afeta quantas voltas
-                angle_param = np.linspace(0, base_angle_mult * 2 * np.pi * (min_scale + (max_scale - min_scale) * rel_v), n_pontos)
-                
-                x_coil_orig = c_x + r * np.cos(angle_param)
-                y_coil_orig = c_y + r * np.sin(angle_param)
-                
-                coil_points = np.vstack((x_coil_orig, y_coil_orig, z_vals)).T
-                all_coils_points.append({"points": coil_points, "voltage": v_val})
-            return all_coils_points
+                desenhar_uma_bobina(fig, num_espiras, radii_p[idx], z_min_coil, z_max_coil,
+                                    center_x_p, center_y_p, 'brown', f'Primário {idx+1} ({num_espiras} espiras)',
+                                    angle_rad_para_rotacao)
+        
+        # Desenha as bobinas do secundário
+        if N2_espiras:
+            radii_s = calcular_radii_adjusted(len(N2_espiras), perna_dx_s, perna_dy_s, a_param_geral)
+            for idx, num_espiras in enumerate(N2_espiras):
+                if idx >= len(radii_s): continue
 
-        V1 = [float(v) for v in V1_voltages]
-        V2 = [float(v) for v in V2_voltages]
-        max_voltage_ref = calcular_max_voltage(V1, V2)
-        num_V1 = len(V1)
-        num_V2 = len(V2)
+                desenhar_uma_bobina(fig, num_espiras, radii_s[idx], z_min_coil, z_max_coil,
+                                    center_x_s, center_y_s, 'gold', f'Secundário {idx+1} ({num_espiras} espiras)',
+                                    angle_rad_para_rotacao)
 
-        if num_V1 > 0:
-            radii_p = calcular_radii_adjusted(num_V1, perna_dx_p, perna_dy_p, a_param_geral)
-            coils_data_p = desenhar_bobinas_coords(V1, radii_p, z_min_coil, z_max_coil, max_voltage_ref, 8, center_x_p, center_y_p)
-            for idx, coil_info in enumerate(coils_data_p):
-                vertices_espiras_p_orig = coil_info["points"]
-                if vertices_espiras_p_orig.size == 0: continue
-                vertices_espiras_p_rot = rotacionar_transformador(vertices_espiras_p_orig, angle_rad_para_rotacao)
-                fig.add_trace(go.Scatter3d(
-                    x=vertices_espiras_p_rot[:,0], y=vertices_espiras_p_rot[:,1], z=vertices_espiras_p_rot[:,2],
-                    mode='lines', line=dict(color='brown', width=3.5), name=f'Primário {idx+1}'
-                ))
-
-        if num_V2 > 0:
-            radii_s = calcular_radii_adjusted(num_V2, perna_dx_s, perna_dy_s, a_param_geral)
-            coils_data_s = desenhar_bobinas_coords(V2, radii_s, z_min_coil, z_max_coil, max_voltage_ref, 8, center_x_s, center_y_s)
-            for idx, coil_info in enumerate(coils_data_s):
-                vertices_espiras_s_orig = coil_info["points"]
-                if vertices_espiras_s_orig.size == 0: continue
-                vertices_espiras_s_rot = rotacionar_transformador(vertices_espiras_s_orig, angle_rad_para_rotacao)
-                fig.add_trace(go.Scatter3d(
-                    x=vertices_espiras_s_rot[:,0], y=vertices_espiras_s_rot[:,1], z=vertices_espiras_s_rot[:,2],
-                    mode='lines', line=dict(color='gold', width=3.5), name=f'Secundário {idx+1}'
-                ))
-
-
-    def gerar_visu_transformador(angle_rad, a, b, V1_tensões, V2_tensões):
+    # ALTERAÇÃO: A função agora recebe 'tipo_lamina'
+    def gerar_visu_transformador(angle_rad, a, b, N1_espiras, N2_espiras, tipo_lamina):
         fig = go.Figure()
 
+        # A geometria do núcleo permanece a mesma
+        if tipo_lamina == "Comprida":
+            janela_x = a * 0.70
+        else:
+            janela_x = a * 0.35
+        
         largura_perna_central_x = a * 0.8
-        profundidade_perna_central_y = b * 0.7 # Relacionado a 'b'
+        profundidade_perna_central_y = b * 0.7
         coil_height_z = 0.8 * a
         z_min_coil_ref = (1.25 * a) - (coil_height_z / 2)
-
-        pc_dx = largura_perna_central_x
-        pc_dy = profundidade_perna_central_y
-        pc_dz = coil_height_z
+        pc_dx, pc_dy, pc_dz = largura_perna_central_x, profundidade_perna_central_y, coil_height_z
         pc_x = (1.5 * a) - (pc_dx / 2)
         pc_y = (b / 2) - (pc_dy / 2)
         pc_z = z_min_coil_ref
-
-        pl_dx = pc_dx / 2 
-        pl_dy = pc_dy 
-        pl_dz = pc_dz 
-        janela_x = a * 0.35
-
+        pl_dx, pl_dy, pl_dz = pc_dx / 2, pc_dy, pc_dz
         ple_x = pc_x - janela_x - pl_dx
-        ple_y = pc_y
-        ple_z = pc_z
+        ple_y, ple_z = pc_y, pc_z
         centro_x_ple_orig = ple_x + pl_dx / 2
         centro_y_ple_orig = ple_y + pl_dy / 2
-
         pld_x = pc_x + pc_dx + janela_x
-        pld_y = pc_y
-        pld_z = pc_z
+        pld_y, pld_z = pc_y, pc_z
         centro_x_pld_orig = pld_x + pl_dx / 2
         centro_y_pld_orig = pld_y + pl_dy / 2
-        
         espessura_base_topo_z = a * 0.3
         be_dx = (pld_x + pl_dx) - ple_x
-        be_dy = pc_dy
-        be_dz = espessura_base_topo_z
-        be_x = ple_x
-        be_y = pc_y
-        be_z = pc_z - espessura_base_topo_z
-
-        bi_dx = be_dx
-        bi_dy = pc_dy
-        bi_dz = espessura_base_topo_z
-        bi_x = ple_x
-        bi_y = pc_y
-        bi_z = pc_z + pc_dz
-
+        be_dy, be_dz = pc_dy, espessura_base_topo_z
+        be_x, be_y, be_z = ple_x, pc_y, pc_z - espessura_base_topo_z
+        bi_dx, bi_dy, bi_dz = be_dx, pc_dy, espessura_base_topo_z
+        bi_x, bi_y, bi_z = ple_x, pc_y, pc_z + pc_dz
         parts_definitions = [
             {"pos": [pc_x, pc_y, pc_z], "dims": [pc_dx, pc_dy, pc_dz]},
             {"pos": [ple_x, ple_y, ple_z], "dims": [pl_dx, pl_dy, pl_dz]},
@@ -416,51 +397,57 @@ with tab1:
             {"pos": [be_x, be_y, be_z], "dims": [be_dx, be_dy, be_dz]},
             {"pos": [bi_x, bi_y, bi_z], "dims": [bi_dx, bi_dy, bi_dz]}
         ]
-        core_color = 'rgb(150, 150, 160)' # Cor do núcleo
-        core_opacity = 0.6 # Opacidade do núcleo
-
         for p_def in parts_definitions:
-            part_vertices = criar_seções_do_transformador(
-                p_def["pos"][0], p_def["pos"][1], p_def["pos"][2],
-                p_def["dims"][0], p_def["dims"][1], p_def["dims"][2]
-            )
+            part_vertices = criar_seções_do_transformador(p_def["pos"][0], p_def["pos"][1], p_def["pos"][2], p_def["dims"][0], p_def["dims"][1], p_def["dims"][2])
             rotated_part_vertices = rotacionar_transformador(part_vertices, angle_rad)
-            plot_transformador(fig, rotated_part_vertices, color=core_color, opacity=core_opacity)
+            plot_transformador(fig, rotated_part_vertices, color='rgb(150, 150, 160)', opacity=0.6)
 
-        z_inicio_bobinas = pc_z 
-        z_fim_bobinas = pc_z + pc_dz
-
-        # Chamada para add_espiras agora passa o parâmetro 'a'
-        add_espiras(fig, angle_rad, a, # <--- Passando 'a' aqui
-                    V1_tensões, V2_tensões,
+        z_inicio_bobinas, z_fim_bobinas = pc_z, pc_z + pc_dz
+        
+        add_espiras(fig, angle_rad, a, N1_espiras, N2_espiras,
                     z_inicio_bobinas, z_fim_bobinas,
                     centro_x_pld_orig, centro_y_pld_orig, pl_dx, pl_dy,
                     centro_x_ple_orig, centro_y_ple_orig, pl_dx, pl_dy)
 
-        fig.update_layout( 
+        fig.update_layout(
             scene=dict(
-                xaxis_title='X', yaxis_title='Y', zaxis_title='Z',
-                aspectmode='data',
+                xaxis_title='X (mm)', yaxis_title='Y (mm)', zaxis_title='Z (mm)', aspectmode='data',
                 xaxis_showspikes=False, yaxis_showspikes=False, zaxis_showspikes=False,
                 bgcolor='rgb(25, 25, 35)',
                 camera=dict(eye=dict(x=2.0, y=2.0, z=1.5))
             ),
             width=900, height=750,
-            margin=dict(l=0, r=0, b=0, t=0),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
+            margin=dict(l=0, r=0, b=0, t=40),
+            template="plotly_dark",
+            
+            legend=dict(
+                title_text='Enrolamentos',
+                title_font_color="white",
+                font=dict(
+                    color="white"
+                ),
+                bgcolor='rgba(45, 45, 55, 0.8)',    # Fundo semitransparente para melhor visualização
+                bordercolor="white",                # Cor da borda
+                borderwidth=1,                      # Largura da borda
+                
+                # Posicionamento da legenda
+                x=1.02,                             # Posição X (1.0 é a borda direita do gráfico)
+                y=1,                                # Posição Y (1.0 é o topo)
+                xanchor='left',                     # Ancoragem horizontal (à esquerda da legenda)
+                yanchor='top'                       # Ancoragem vertical (no topo da legenda)
+            )
+        )        
         return fig
 
-
-    st.title("Transformador Monofásico - Visualização 3D Interativa")
-
-    if st.button("Gerar Transformador"):
-        angle = np.radians(90)
-        V1_floats = [float(v) for v in V1_list]
-        V2_floats = [float(v) for v in V2_list]
-        fig = gerar_visu_transformador(angle, a, b, V1_floats, V2_floats)
-        st.plotly_chart(fig, use_container_width=True)
-
+    st.header("Visualização 3D Interativa")
+    angle = np.radians(90)
+    V1_floats = [float(v) for v in V1_list]
+    V2_floats = [float(v) for v in V2_list]
+    
+    # ALTERAÇÃO: Passa o 'tipo_de_lamina' para a função de visualização
+    fig = gerar_visu_transformador(angle, a, b, N1, N2, tipo_de_lamina)
+    
+    st.plotly_chart(fig, use_container_width=True)
 
 with tab2:
     st.header("Desafio 2")

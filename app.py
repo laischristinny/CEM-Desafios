@@ -165,20 +165,21 @@ with tab1:
     Pcu = (Scu / 100 * lm * 9) / 1000
 
     # ======= RESULTADOS =======
+    
     st.header("Resultados do Dimensionamento")
 
     # --- LINHA 1: Espiras e Lâmina ---
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Número de Espiras")
-        st.write(f"**Primário:** {N1} espiras")
-        st.write(f"**Secundário:** {N2} espiras")
+        st.write(f"**Primário:** `{N1} espiras`")
+        st.write(f"**Secundário:** `{N2} espiras`")
 
     with col2:
         st.subheader("Lâmina do Núcleo")
-        st.write(f"**Tipo:** Nº {numero_lamina['numero']} ({tipo_de_lamina})")
-        st.write(f"**Seção da Janela (Sj):** {numero_lamina['secao_mm2']} mm²")
-        st.write(f"**Quantidade (empilhamento b):** {b:.1f} cm")
+        st.write(f"**Tipo:** `Nº {numero_lamina['numero']} ({tipo_de_lamina})`")
+        st.write(f"**Seção da Janela (Sj):** `{numero_lamina['secao_mm2']} mm²`")
+        st.write(f"**Quantidade (empilhamento b):** `{b:.1f} cm`")
 
     st.divider()
 
@@ -186,18 +187,18 @@ with tab1:
     col3, col4 = st.columns(2)
     with col3:
         st.subheader("Bitola dos Cabos (AWG)")
-        st.write(f"**Primário 1 ({V1_list[0]}V):** {fio_awg_s1_1['AWG']} ({fio_awg_s1_1['area_mm2']} mm²)")
+        st.write(f"**Primário 1 ({V1_list[0]}V):** `{fio_awg_s1_1['AWG']} ({fio_awg_s1_1['area_mm2']} mm²)`")
         if len(S1) >= 2:
-            st.write(f"**Primário 2 ({V1_list[1]}V):** {fio_awg_s1_2['AWG']} ({fio_awg_s1_2['area_mm2']} mm²)")
-        st.write(f"**Secundário 1 ({V2_list[0]}V):** {fio_awg_s2_1['AWG']} ({fio_awg_s2_1['area_mm2']} mm²)")
+            st.write(f"**Primário 2 ({V1_list[1]}V):** `{fio_awg_s1_2['AWG']} ({fio_awg_s1_2['area_mm2']} mm²)`")
+        st.write(f"**Secundário 1 ({V2_list[0]}V):** `{fio_awg_s2_1['AWG']} ({fio_awg_s2_1['area_mm2']} mm²)`")
         if len(S2) >= 2:
-            st.write(f"**Secundário 2 ({V2_list[1]}V):** {fio_awg_s2_2['AWG']} ({fio_awg_s2_2['area_mm2']} mm²)")
+            st.write(f"**Secundário 2 ({V2_list[1]}V):** `{fio_awg_s2_2['AWG']} ({fio_awg_s2_2['area_mm2']} mm²)`")
 
     with col4:
         st.subheader("Dimensões do Núcleo")
-        st.write(f"**Largura da coluna central (a):** {a} cm")
-        st.write(f"**Seção Geométrica Efetiva (Sg):** {SgEfetivo:.2f} cm²")
-        st.write(f"**Seção Magnética Efetiva (Sm):** {SmEfetivo:.2f} cm²")
+        st.write(f"**Largura da coluna central (a):** `{a} cm`")
+        st.write(f"**Seção Geométrica Efetiva (Sg):** `{SgEfetivo:.2f} cm²`")
+        st.write(f"**Seção Magnética Efetiva (Sm):** `{SmEfetivo:.2f} cm²`")
 
     st.divider()
 
@@ -205,13 +206,13 @@ with tab1:
     col5, col6 = st.columns(2)
     with col5:
         st.subheader("Peso Estimado")
-        st.write(f"**Núcleo de ferro (Pfe):** {Pfe:.2f} kg")
-        st.write(f"**Enrolamento de cobre (Pcu):** {Pcu:.2f} kg")
+        st.write(f"**Núcleo de ferro (Pfe):** `{Pfe:.2f} kg`")
+        st.write(f"**Enrolamento de cobre (Pcu):** `{Pcu:.2f} kg`")
 
     with col6:
         st.subheader("Análise de Viabilidade")
-        st.write(f"**Área total do cobre (Scu):** {Scu:.2f} mm²")
-        st.write(f"**Área da janela da lâmina (Sj):** {Sj} mm²")
+        st.write(f"**Área total do cobre (Scu):** `{Scu:.2f} mm²`")
+        st.write(f"**Área da janela da lâmina (Sj):** `{Sj} mm²`")
         st.metric(label="Relação Sj / Scu", value=f"{executavel:.2f}", help="Um valor >= 3 é considerado ideal.")
 
     st.divider()

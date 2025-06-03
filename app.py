@@ -56,11 +56,23 @@ with tab1:
         "Ferro Puro (99,8%)": 20000
     }
 
+    # Adiciona a opção "Outro" à lista de materiais
+    opcoes_material = list(materiais_nucleo.keys()) + ["Outro"]
+
     # Seletor de material do núcleo
     material_escolhido = st.selectbox(
         "Material do Núcleo",
-        options=list(materiais_nucleo.keys())
+        options=opcoes_material
     )
+
+    # Lógica para definir B_max
+    if material_escolhido == "Outro":
+        bm_manual = st.number_input("Insira o valor de Bm (Gauss):", min_value=0.0, value=10000.0, step=100.0, format="%.2f")
+        B_max = bm_manual
+    else:
+        B_max = materiais_nucleo[material_escolhido]
+
+    st.write(f"O B_max escolhido é: {B_max} Gauss")
 
     # ======= CÁLCULOS =======
     W1 = 1.1 * W2
@@ -141,10 +153,13 @@ with tab1:
     SgEfetivo = a * b
     SmEfetivo = round(SgEfetivo / 1.1, 2)
 
-    B_max = materiais_nucleo[material_escolhido]
-
-    x = 1e8 / (4.44 * B_max * f)
-    EspVolt = round(x / SmEfetivo, 4)
+    # Assegure que B_max não seja zero para evitar divisão por zero
+    if B_max > 0:
+        x = 1e8 / (4.44 * B_max * f)
+        EspVolt = round(x / SmEfetivo, 4)
+        st.write(f"EspVolt calculado: {EspVolt}")
+    else:
+        st.error("B_max deve ser maior que zero para calcular EspVolt.")
 
     N1 = math.ceil(EspVolt * V1_list[0])
     N2 = math.ceil(EspVolt * V2_list[0] * 1.1)

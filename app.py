@@ -315,15 +315,9 @@ with tab1:
         ))
 
     def add_espiras(fig, angle_rad_para_rotacao, a_param_geral,
-                N1_espiras, N2_espiras,
-                z_min_coil, z_max_coil,
+                V1_voltages, V2_voltages, N1, N2, z_min_coil, z_max_coil,
                 center_x_p, center_y_p, perna_dx_p, perna_dy_p,
                 center_x_s, center_y_s, perna_dx_s, perna_dy_s):
-
-        if isinstance(N1_espiras, (int, float)):
-            N1_espiras = [int(N1_espiras)]
-        if isinstance(N2_espiras, (int, float)):
-            N2_espiras = [int(N2_espiras)]
 
         def calcular_radii_adjusted(num_coils, perna_dx, perna_dy, a_ref_dim):
             if num_coils == 0: return []
@@ -335,61 +329,98 @@ with tab1:
             if num_coils > 3:
                 espessura_pacote_total_visual = min(a_ref_dim * (0.15 + num_coils * 0.03), a_ref_dim * 0.5)
             raio_ultima_espira = raio_primeira_espira + espessura_pacote_total_visual
+            if raio_primeira_espira <= 0.01: raio_primeira_espira = 0.01
+            if raio_ultima_espira <= raio_primeira_espira:
+                raio_ultima_espira = raio_primeira_espira + a_ref_dim * 0.05
             return np.linspace(raio_primeira_espira, raio_ultima_espira, num_coils).tolist()
-        
-        # Desenha as bobinas do primário
-        if N1_espiras:
-            radii_p = calcular_radii_adjusted(len(N1_espiras), perna_dx_p, perna_dy_p, a_param_geral)
-            for idx, num_espiras in enumerate(N1_espiras):
-                if idx >= len(radii_p): continue
-                
-                desenhar_uma_bobina(fig, num_espiras, radii_p[idx], z_min_coil, z_max_coil,
-                                    center_x_p, center_y_p, 'brown', f'Primário {idx+1} ({num_espiras} espiras)',
-                                    angle_rad_para_rotacao)
-        
-        # Desenha as bobinas do secundário
-        if N2_espiras:
-            radii_s = calcular_radii_adjusted(len(N2_espiras), perna_dx_s, perna_dy_s, a_param_geral)
-            for idx, num_espiras in enumerate(N2_espiras):
-                if idx >= len(radii_s): continue
 
-                desenhar_uma_bobina(fig, num_espiras, radii_s[idx], z_min_coil, z_max_coil,
-                                    center_x_s, center_y_s, 'gold', f'Secundário {idx+1} ({num_espiras} espiras)',
-                                    angle_rad_para_rotacao)
+        # A função para desenhar as bobinas agora usa 'n_espiras' para definir as voltas.
+        # Os parâmetros relacionados à tensão para a geometria foram removidos.
+        def desenhar_bobinas_coords(voltages, n_espiras, radii, z_min, z_max, c_x, c_y):
+            all_coils_points = []
+            # n_espiras é o mesmo para todos os enrolamentos de um mesmo tipo (primário/secundário)
+            if n_espiras <= 0: return []
+
+            for i, v_val in enumerate(voltages):
+                if i >= len(radii) or radii[i] <= 0: continue
+                r = radii[i]
+
+                # Define o número de pontos para criar uma hélice suave
+                # Ex: 20 pontos por espira, com um mínimo de 50 pontos.
+                n_pontos = max(int(n_espiras * 20), 50)
+                z_vals = np.linspace(z_min, z_max, n_pontos)
+
+                # O ângulo final é diretamente proporcional ao número de espiras (N * 2 * PI)
+                angle_param = np.linspace(0, n_espiras * 2 * np.pi, n_pontos)
+
+                x_coil_orig = c_x + r * np.cos(angle_param)
+                y_coil_orig = c_y + r * np.sin(angle_param)
+                all_coils_points.append({"points": np.vstack((x_coil_orig, y_coil_orig, z_vals)).T, "voltage": v_val})
+            return all_coils_points
+
+        V1, V2 = [float(v) for v in V1_voltages], [float(v) for v in V2_voltages]
+        
+        if V1 and N1 > 0:
+            radii_p = calcular_radii_adjusted(len(V1), perna_dx_p, perna_dy_p, a_param_geral)
+            # Passa N1 para a função de desenho
+            for idx, coil_info in enumerate(desenhar_bobinas_coords(V1, N1, radii_p, z_min_coil, z_max_coil, center_x_p, center_y_p)):
+                vertices_rot = rotacionar_transformador(coil_info["points"], angle_rad_para_rotacao)
+                fig.add_trace(go.Scatter3d(x=vertices_rot[:,0], y=vertices_rot[:,1], z=vertices_rot[:,2],
+                    mode='lines', line=dict(color='brown', width=3.5), name=f'Primário {idx+1} ({N1} espiras)'))
+        if V2 and N2 > 0:
+            radii_s = calcular_radii_adjusted(len(V2), perna_dx_s, perna_dy_s, a_param_geral)
+            # Passa N2 para a função de desenho
+            for idx, coil_info in enumerate(desenhar_bobinas_coords(V2, N2, radii_s, z_min_coil, z_max_coil, center_x_s, center_y_s)):
+                vertices_rot = rotacionar_transformador(coil_info["points"], angle_rad_para_rotacao)
+                fig.add_trace(go.Scatter3d(x=vertices_rot[:,0], y=vertices_rot[:,1], z=vertices_rot[:,2],
+                    mode='lines', line=dict(color='gold', width=3.5), name=f'Secundário {idx+1} ({N2} espiras)'))
+
+
 
     # ALTERAÇÃO: A função agora recebe 'tipo_lamina'
-    def gerar_visu_transformador(angle_rad, a, b, N1_espiras, N2_espiras, tipo_lamina):
+    def gerar_visu_transformador(angle_rad, a, b, V1_tensões, V2_tensões, N1, N2, tipo_lamina):
         fig = go.Figure()
 
-        # A geometria do núcleo permanece a mesma
         if tipo_lamina == "Comprida":
             janela_x = a * 0.70
-        else:
+        else: # Padronizada
             janela_x = a * 0.35
-        
+
         largura_perna_central_x = a * 0.8
         profundidade_perna_central_y = b * 0.7
         coil_height_z = 0.8 * a
         z_min_coil_ref = (1.25 * a) - (coil_height_z / 2)
+
         pc_dx, pc_dy, pc_dz = largura_perna_central_x, profundidade_perna_central_y, coil_height_z
         pc_x = (1.5 * a) - (pc_dx / 2)
         pc_y = (b / 2) - (pc_dy / 2)
         pc_z = z_min_coil_ref
+
         pl_dx, pl_dy, pl_dz = pc_dx / 2, pc_dy, pc_dz
+        
         ple_x = pc_x - janela_x - pl_dx
-        ple_y, ple_z = pc_y, pc_z
+        ple_y = pc_y
+        ple_z = pc_z
         centro_x_ple_orig = ple_x + pl_dx / 2
         centro_y_ple_orig = ple_y + pl_dy / 2
+
         pld_x = pc_x + pc_dx + janela_x
-        pld_y, pld_z = pc_y, pc_z
+        pld_y = pc_y
+        pld_z = pc_z
         centro_x_pld_orig = pld_x + pl_dx / 2
         centro_y_pld_orig = pld_y + pl_dy / 2
+        
         espessura_base_topo_z = a * 0.3
         be_dx = (pld_x + pl_dx) - ple_x
-        be_dy, be_dz = pc_dy, espessura_base_topo_z
-        be_x, be_y, be_z = ple_x, pc_y, pc_z - espessura_base_topo_z
+        be_dy = pc_dy
+        be_dz = espessura_base_topo_z
+        be_x = ple_x
+        be_y = pc_y
+        be_z = pc_z - espessura_base_topo_z
+
         bi_dx, bi_dy, bi_dz = be_dx, pc_dy, espessura_base_topo_z
         bi_x, bi_y, bi_z = ple_x, pc_y, pc_z + pc_dz
+
         parts_definitions = [
             {"pos": [pc_x, pc_y, pc_z], "dims": [pc_dx, pc_dy, pc_dz]},
             {"pos": [ple_x, ple_y, ple_z], "dims": [pl_dx, pl_dy, pl_dz]},
@@ -397,6 +428,7 @@ with tab1:
             {"pos": [be_x, be_y, be_z], "dims": [be_dx, be_dy, be_dz]},
             {"pos": [bi_x, bi_y, bi_z], "dims": [bi_dx, bi_dy, bi_dz]}
         ]
+        
         for p_def in parts_definitions:
             part_vertices = criar_seções_do_transformador(p_def["pos"][0], p_def["pos"][1], p_def["pos"][2], p_def["dims"][0], p_def["dims"][1], p_def["dims"][2])
             rotated_part_vertices = rotacionar_transformador(part_vertices, angle_rad)
@@ -404,49 +436,32 @@ with tab1:
 
         z_inicio_bobinas, z_fim_bobinas = pc_z, pc_z + pc_dz
         
-        add_espiras(fig, angle_rad, a, N1_espiras, N2_espiras,
-                    z_inicio_bobinas, z_fim_bobinas,
+        # Passa N1 e N2 para a função add_espiras
+        add_espiras(fig, angle_rad, a, V1_tensões, V2_tensões, N1, N2, z_inicio_bobinas, z_fim_bobinas,
                     centro_x_pld_orig, centro_y_pld_orig, pl_dx, pl_dy,
                     centro_x_ple_orig, centro_y_ple_orig, pl_dx, pl_dy)
 
         fig.update_layout(
             scene=dict(
-                xaxis_title='X (mm)', yaxis_title='Y (mm)', zaxis_title='Z (mm)', aspectmode='data',
+                xaxis_title='X', yaxis_title='Y', zaxis_title='Z', aspectmode='data',
                 xaxis_showspikes=False, yaxis_showspikes=False, zaxis_showspikes=False,
                 bgcolor='rgb(25, 25, 35)',
                 camera=dict(eye=dict(x=2.0, y=2.0, z=1.5))
             ),
             width=900, height=750,
-            margin=dict(l=0, r=0, b=0, t=40),
-            template="plotly_dark",
-            
-            legend=dict(
-                title_text='Enrolamentos',
-                title_font_color="white",
-                font=dict(
-                    color="white"
-                ),
-                bgcolor='rgba(45, 45, 55, 0.8)',    # Fundo semitransparente para melhor visualização
-                bordercolor="white",                # Cor da borda
-                borderwidth=1,                      # Largura da borda
-                
-                # Posicionamento da legenda
-                x=1.02,                             # Posição X (1.0 é a borda direita do gráfico)
-                y=1,                                # Posição Y (1.0 é o topo)
-                xanchor='left',                     # Ancoragem horizontal (à esquerda da legenda)
-                yanchor='top'                       # Ancoragem vertical (no topo da legenda)
-            )
-        )        
+            margin=dict(l=0, r=0, b=0, t=0),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
         return fig
+
 
     st.header("Visualização 3D Interativa")
     angle = np.radians(90)
     V1_floats = [float(v) for v in V1_list]
     V2_floats = [float(v) for v in V2_list]
     
-    # ALTERAÇÃO: Passa o 'tipo_de_lamina' para a função de visualização
-    fig = gerar_visu_transformador(angle, a, b, N1, N2, tipo_de_lamina)
-    
+    fig = gerar_visu_transformador(angle, a, b, V1_floats, V2_floats, N1, N2, tipo_de_lamina)
+
     st.plotly_chart(fig, use_container_width=True)
 
 with tab2:
@@ -454,6 +469,15 @@ with tab2:
     VM = st.number_input("Tensão Máxima", value=325)
     N = st.number_input("Número de Espiras", value=850)
     freq = st.number_input("Frequência (Hz)", value=50)
+
+    # 1. Adiciona um slider para o usuário escolher a duração da simulação em milissegundos
+    tempo_final_ms = st.slider(
+        "Duração da Simulação (ms)", 
+        min_value=20,          # Valor mínimo de 20ms (1 ciclo em 50Hz)
+        max_value=1000,        # Valor máximo de 1000ms (1 segundo)
+        value=340,             # Valor padrão de 340ms
+        step=10                # Incremento de 10 em 10 ms
+    )
 
     try:
         # Lê o Excel diretamente do diretório atual
@@ -472,8 +496,8 @@ with tab2:
             # Parâmetros elétricos
             w = 2 * np.pi * freq
 
-            # Tempo de simulação (0 a 340ms) com passo de 1/3000 s
-            t = np.arange(0, 0.340, 1/3000)  # Vai até 340 ms
+            # 2. Usa o valor do slider (convertido para segundos) para criar o array de tempo
+            t = np.arange(0, tempo_final_ms / 1000, 1/3000)
 
             # Fluxo magnético a partir da tensão (mesmo cálculo do MATLAB)
             fluxo_t = -VM / (w * N) * np.cos(w * t)

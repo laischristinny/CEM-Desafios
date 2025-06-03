@@ -21,17 +21,29 @@ Este é um aplicativo interativo construído com **Streamlit** para auxiliar no 
 - Interpolação da curva B-H para simulação
 - Cálculo de corrente de magnetização com base na curva do material
 
-### 🔹 Desafio 3 - Regulação e Rendimento
-- Cálculo do rendimento do transformador com base em perdas no cobre e ferro
-- Análise da **regulação de tensão** em função da carga
-- Gráficos dinâmicos de rendimento e regulação para diferentes regimes de carga
-- Possibilidade de simular cargas indutivas, resistivas ou capacitivas
+### 🔹 Desafio 3 - Calculadora de Parâmetros de Transformador Monofásico
+- Cálculo dos parâmetros:
+  - Resistência do núcleo (Rc)
+  - Reatância de magnetização (Xm)
+  - Corrente ativa (Ic) e reativa (Im) no circuito aberto
+  - Resistência equivalente (Req)
+  - Reatância equivalente (Xeq)
+- Opção de visualização dos parâmetros no modelo equivalente:
+  - Modelo em Série
+  - Modelo em T
+  - Modelo em L
+- Conversão dos parâmetros referidos ao primário ou secundário.
+- Geração de Diagrama Fasorial da Corrente de Excitação.
 
-### 🔹 Desafio 4 - Transformador com Tomadas
-- Simulação de transformador com **tomadas de variação de tensão**
-- Avaliação do efeito das tomadas sobre a tensão secundária
-- Visualização gráfica das alterações de tensão conforme diferentes posições da tomada
-- Útil para estudo de transformadores com múltiplas tensões de saída
+### 🔹 Desafio 4 - Regulação de Tensão
+Este módulo calcula a regulação de tensão de um transformador considerando seus parâmetros equivalentes (resistência e reatância) e o fator de potência da carga. Além disso, gera um diagrama fasorial interativo representando as tensões e quedas internas no transformador.
+Cálculo da regulação de tensão aproximada em percentual (%).
+
+- Visualização do diagrama fasorial com os vetores:
+- Tensão no secundário (V₂)
+- Queda resistiva (I·Rₑq)
+- Queda reativa (j·I·Xₑq)
+- Tensão no primário estimada (V₁ aprox.)
 
 ---
 

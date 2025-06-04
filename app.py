@@ -545,193 +545,134 @@ with tab3:
     st.title("Transformador Monofásico - Calculadora de Parâmetros")
 
     # Entradas do transformador
-    N1 = st.number_input("Número de espiras do primário (N1)", min_value=1, value=1000)
-    N2 = st.number_input("Número de espiras do secundário (N2)", min_value=1, value=100)
-
-    prim_side = "alto" if N1 > N2 else "baixo"
-    sec_side = "alto" if prim_side == "baixo" else "baixo"
-
     circuit_type = st.selectbox("Tipo de Circuito Equivalente", ["", "T", "L", "Série"])
-    referred_to = st.selectbox("Referido a", ["", "primário", "secundário"])
-    sec_type = st.selectbox(f"Tipo de Ensaio do Secundário", ["", "circuito-aberto", "curto-circuito"])
-    prim_type = "curto-circuito" if sec_type == "circuito-aberto" else "circuito-aberto"
+    referred_to = st.selectbox("Referido a", ["", "Curto-Circuito", "Circuito Aberto"])
 
-    st.markdown("## Dados do Ensaio de Curto-Circuito")
+    st.markdown("## Conjunto de Dados de Curto-Circuito")
     Va = st.number_input("Tensão Va (V)", min_value=0.0, value=220.0)
     Ia = st.number_input("Corrente Ia (A)", min_value=0.0, value=1.0)
     Pa = st.number_input("Potência Pa (W)", min_value=0.0, value=100.0)
 
-    st.markdown("## Conjunto de Dados Circuito Aberto")
+    st.markdown("## Conjunto de Dados de Circuito Aberto")
     Vb = st.number_input("Tensão Vb (V)", min_value=0.0, value=50.0)
     Ib = st.number_input("Corrente Ib (A)", min_value=0.0, value=5.0)
     Pb = st.number_input("Potência Pb (W)", min_value=0.0, value=200.0)
 
     if st.button("Calcular Parâmetros"):
-            # Validar entradas
-            if Ia <= 0 or Ib <= 0:
-                raise ValueError("Corrente deve ser maior que zero.")
-            if Pa <= 0 or Pb <= 0:
-                raise ValueError("Potência deve ser maior que zero.")
-            if Va <= 0 or Vb <= 0:
-                raise ValueError("Tensão deve ser maior que zero.")
+        # Determinar qual lado tem maior tensão
+        high_tension_side = "CC" if Va > Vb else "CA"
+        low_tension_side = "CA" if Va > Vb else "CC"
 
-            # Relação de transformação
-            def calcular_relacao_transformacao(N1, N2):
-                return N1 / N2
+        # Referência desejada
+        reference = "CC" if referred_to == "Curto-Circuito" else "CA"
 
-            # Converte impedância para o lado escolhido
-            def referir_impedancia(valor, a, lado_ensaio, lado_referido):
-                if lado_ensaio == lado_referido:
-                    return valor
-                elif lado_referido == "primário":
-                    return valor * a ** 2
-                elif lado_referido == "secundário":
-                    return valor / a ** 2
-                return valor
+        # Razão de transformação
+        a = Va / Vb if high_tension_side == "CC" else Vb / Va
+        a2 = a ** 2
 
-            # Ensaio de circuito aberto
-            def calcular_ensaio_circuito_aberto(Vb, Ib, Pb, a, lado_ensaio, lado_referido):
-                if Ib == 0 or Vb == 0:
-                    return 0, 0, 0, 0, 0
+        # Calcular parâmetros (sem conversão ainda)
+        Zeq = Va / Ia
+        Req = Pa / (Ia ** 2)
+        Xeq = (Zeq ** 2 - Req ** 2) ** 0.5
 
-                Rc = Vb ** 2 / Pb if Pb > 0 else float('inf')
-                Ic = Pb / Vb
-                Im = math.sqrt(Ib ** 2 - Ic ** 2) if Ib > Ic else 0
-                Xm = Vb / Im if Im != 0 else float('inf')
-                Zphi = Vb / Ib if Ib != 0 else float('inf')
+        S = Vb * Ib
+        cos_phi = Pb / S
+        Iw = Ib * cos_phi
+        Im = Ib * (1 - cos_phi ** 2) ** 0.5
 
-                # Converte Rc e Xm para o lado referido
-                Rc_ref = referir_impedancia(Rc, a, lado_ensaio, lado_referido)
-                Xm_ref = referir_impedancia(Xm, a, lado_ensaio, lado_referido)
+        Rc = Vb / Iw
+        Xm = Vb / Im
 
-                return Rc_ref, Xm_ref, Zphi, Ic, Im
+        # Aplicar conversão se necessário
+        if reference != high_tension_side:
+            Req /= a2
+            Xeq /= a2
+            Rc /= a2
+            Xm /= a2
+        elif reference != low_tension_side:
+            Req *= a2
+            Xeq *= a2
+            Rc *= a2
+            Xm *= a2  
 
-            # Ensaio de curto-circuito
-            def calcular_ensaio_curto_circuito(Va, Ia, Pa, a, lado_ensaio, lado_referido):
-                if Ia == 0 or Va == 0:
-                    return 0, 0, 0
+        if reference == "CC":
+            st.subheader("Parâmetros do Ensaio de Curto-Circuito")
 
-                Req = Pa / Ia ** 2 if Ia != 0 else float('inf')
-                Zcc = Va / Ia
-                Xeq = math.sqrt(Zcc ** 2 - Req ** 2) if Zcc > Req else 0
+            if circuit_type == "T":
+                st.write("Req (cada lado):", f"{Req / 2:.2f} Ω")
+                st.write("Xeq (cada lado):", f"{Xeq / 2:.2f} Ω")
 
-                # Converte Req e Xeq para o lado referido
-                Req_ref = referir_impedancia(Req, a, lado_ensaio, lado_referido)
-                Xeq_ref = referir_impedancia(Xeq, a, lado_ensaio, lado_referido)
+            elif circuit_type == "L":
+                st.write("Req total:", f"{Req:.2f} Ω")
+                st.write("Xeq total:", f"{Xeq:.2f} Ω")
 
-                return Req_ref, Xeq_ref, Zcc
+            elif circuit_type == "Série":
+                st.write("Req total:", f"{Req:.2f} Ω")
+                st.write("Xeq total:", f"{Xeq:.2f} Ω")
 
-            # Parâmetros equivalentes para tipos T ou L
-            def calcular_parametros_equivalentes(circuit_type, Req, Xeq):
-                if circuit_type == 'Série':
-                    return Req, Xeq, None, None, None, None
-                elif circuit_type in ['T', 'L']:
-                    Rp = Req / 2
-                    Xp = Xeq / 2
-                    Rs = Req / 2
-                    Xs = Xeq / 2
-                    return None, None, Rp, Xp, Rs, Xs
-                else:
-                    return None, None, None, None, None, None
-            
-            # Relação de transformação
-            a = calcular_relacao_transformacao(N1, N2)
-
-            # Determina o lado de cada ensaio
-            ensaio_ca_lado = "secundário" if sec_type == "circuito-aberto" else "primário"
-            ensaio_cc_lado = "secundário" if sec_type == "curto-circuito" else "primário"
-
-            # Calcula os resultados referidos ao lado selecionado
-            Rc_prime, Xm_prime, Zphi, Ic, Im = calcular_ensaio_circuito_aberto(
-                Vb, Ib, Pb, a, ensaio_ca_lado, referred_to
-            )
-
-            ReqTotal, XeqTotal, Zcc = calcular_ensaio_curto_circuito(
-                Va, Ia, Pa, a, ensaio_cc_lado, referred_to
-            )
-
-            # Calcula os parâmetros individuais se necessário
-            ReqTotal_out, XeqTotal_out, Rp, Xp, Rs, Xs = calcular_parametros_equivalentes(circuit_type, ReqTotal, XeqTotal)
-
-            # Exibição dos resultados
-            st.markdown("### Resultados do Transformador")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.subheader("Resultados do Ensaio de Circuito Aberto")
-                ensaio_ca_lado = "secundário" if sec_type == "circuito-aberto" else "primário"
-                st.text(f"Obtido com circuito aberto no lado {ensaio_ca_lado}")
-
-                st.markdown(f"**Rc (Ω)** — resistência do núcleo (perdas no ferro): {round(Rc_prime, 2)}")
-                st.markdown(f"**Xm (Ω)** — reatância magnetizante (campo magnético): {round(Xm_prime, 2)}")
-                st.markdown(f"**Zphi (Ω)** — impedância do circuito aberto: {round(Zphi, 2)}")
-                st.markdown(f"**Ic (mA)** — corrente ativa do núcleo: {round(Ic * 1000, 2)}")
-                st.markdown(f"**Im (mA)** — corrente reativa do núcleo: {round(Im * 1000, 2)}")
-
-            with col2:
-                st.subheader("Resultados do Ensaio de Curto-Circuito")
-                ensaio_cc_lado = "secundário" if sec_type == "curto-circuito" else "primário"
-                st.text(f"Obtido com curto-circuito no lado {ensaio_cc_lado}")
-
-                if circuit_type == 'Série':
-                    st.markdown(f"**Req Total (Ω)** — resistência equivalente total: {round(ReqTotal, 2) if ReqTotal else '—'}")
-                    st.markdown(f"**Xeq Total (Ω)** — reatância equivalente total: {round(XeqTotal, 2) if XeqTotal else '—'}")
-                else:
-                    st.markdown(f"**Rp (Ω)** — resistência do primário: {round(Rp, 2) if Rp else '—'}")
-                    st.markdown(f"**Xp (Ω)** — reatância do primário: {round(Xp, 2) if Xp else '—'}")
-                    st.markdown(f"**Rs (Ω)** — resistência do secundário: {round(Rs, 2) if Rs else '—'}")
-                    st.markdown(f"**Xs (Ω)** — reatância do secundário: {round(Xs, 2) if Xs else '—'}")         
-
-            st.markdown("### Diagrama Fasorial da Corrente de Excitação")
-
-            if Ic is not None and Im is not None:
-                fig, ax = plt.subplots()
-
-                # Normaliza os vetores
-                Iphi = np.sqrt(Ic**2 + Im**2)
-                max_val = max(abs(Iphi), abs(Ic), abs(Im))
-                fator_ampliacao = 1.2  # 20% extra para margem
-                escala = 1 / max_val if max_val != 0 else 1
-
-                # Vetores normalizados
-                Ic_n = Ic * escala
-                Im_n = Im * escala
-                Iphi_n_x = Ic_n
-                Iphi_n_y = Im_n
-
-                # Vetor tensão (referência horizontal)
-                ax.quiver(0, 0, 1, 0, angles='xy', scale_units='xy', scale=1, color='orange', label='V (referência)')
-
-                # Correntes
-                ax.quiver(0, 0, Ic_n, 0, angles='xy', scale_units='xy', scale=1, color='r', label='Ic (ativa)')
-                ax.quiver(0, 0, 0, Im_n, angles='xy', scale_units='xy', scale=1, color='b', label='Im (reativa)')
-                ax.quiver(0, 0, Iphi_n_x, Iphi_n_y, angles='xy', scale_units='xy', scale=1, color='g', label='Iφ (resultante)')
-
-                # Adiciona o ângulo φ entre tensão e corrente
-                if Iphi != 0:
-                    cos_phi = Ic / Iphi
-                    cos_phi = np.clip(cos_phi, -1, 1)
-                    phi_rad = np.arccos(cos_phi)
-                    phi_deg = np.degrees(phi_rad)
-
-                    arc = Arc((0, 0), 0.4, 0.4, angle=0, theta1=0, theta2=phi_deg, color='gray', linestyle='--')
-                    ax.add_patch(arc)
-                    ax.text(0.3, 0.05, f'φ = {phi_deg:.2f}°', fontsize=10, color='gray')
-
-                # Configurações do gráfico
-                ax.set_xlim(-fator_ampliacao, fator_ampliacao)
-                ax.set_ylim(-fator_ampliacao, fator_ampliacao)
-                ax.set_xlabel("Eixo Real")
-                ax.set_ylabel("Eixo Imaginário")
-                ax.set_title("Diagrama Fasorial da Corrente de Excitação")
-                ax.grid(True)
-                ax.set_aspect('equal')
-                ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
-
-                st.pyplot(fig)
             else:
-                st.warning("Corrente de excitação inválida ou ausente. Verifique os dados de entrada.")
+                st.warning("Selecione o tipo de circuito equivalente para visualizar os parâmetros.")
+
+        elif reference == "CA":
+            st.subheader("Parâmetros do Ensaio de Circuito Aberto (Referidos ao lado selecionado)")
+
+            st.write("Rc:", f"{Rc:.2f} Ω")
+            st.write("Xm:", f"{Xm:.2f} Ω")
+            st.write("Fator de Potência (cosφ):", f"{cos_phi:.3f}")
+            st.write("Corrente de Magnetização (Im):", f"{Im:.2f} A")
+
+        else:
+            st.info("Selecione se deseja referir os parâmetros ao lado de Curto-circuito ou Circuito Aberto.")
+
+        st.markdown("### Diagrama Fasorial da Corrente de Excitação")
+
+        # if Ic is not None and Im is not None:
+        #     fig, ax = plt.subplots()
+
+        #     # Normaliza os vetores
+        #     Iphi = np.sqrt(Ic**2 + Im**2)
+        #     max_val = max(abs(Iphi), abs(Ic), abs(Im))
+        #     fator_ampliacao = 1.2  # 20% extra para margem
+        #     escala = 1 / max_val if max_val != 0 else 1
+
+        #     # Vetores normalizados
+        #     Ic_n = Ic * escala
+        #     Im_n = Im * escala
+        #     Iphi_n_x = Ic_n
+        #     Iphi_n_y = Im_n
+
+        #     # Vetor tensão (referência horizontal)
+        #     ax.quiver(0, 0, 1, 0, angles='xy', scale_units='xy', scale=1, color='orange', label='V (referência)')
+
+        #     # Correntes
+        #     ax.quiver(0, 0, Ic_n, 0, angles='xy', scale_units='xy', scale=1, color='r', label='Ic (ativa)')
+        #     ax.quiver(0, 0, 0, Im_n, angles='xy', scale_units='xy', scale=1, color='b', label='Im (reativa)')
+        #     ax.quiver(0, 0, Iphi_n_x, Iphi_n_y, angles='xy', scale_units='xy', scale=1, color='g', label='Iφ (resultante)')
+
+        #     # Adiciona o ângulo φ entre tensão e corrente
+        #     if Iphi != 0:
+        #         cos_phi = Ic / Iphi
+        #         cos_phi = np.clip(cos_phi, -1, 1)
+        #         phi_rad = np.arccos(cos_phi)
+        #         phi_deg = np.degrees(phi_rad)
+
+        #         arc = Arc((0, 0), 0.4, 0.4, angle=0, theta1=0, theta2=phi_deg, color='gray', linestyle='--')
+        #         ax.add_patch(arc)
+        #         ax.text(0.3, 0.05, f'φ = {phi_deg:.2f}°', fontsize=10, color='gray')
+
+        #     # Configurações do gráfico
+        #     ax.set_xlim(-fator_ampliacao, fator_ampliacao)
+        #     ax.set_ylim(-fator_ampliacao, fator_ampliacao)
+        #     ax.set_xlabel("Eixo Real")
+        #     ax.set_ylabel("Eixo Imaginário")
+        #     ax.set_title("Diagrama Fasorial da Corrente de Excitação")
+        #     ax.grid(True)
+        #     ax.set_aspect('equal')
+        #     ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+
+        #     st.pyplot(fig)
+        # else:
+        #     st.warning("Corrente de excitação inválida ou ausente. Verifique os dados de entrada.")
 
 with tab4:
     st.title("Desafio 4 - Regulação de Tensão")
